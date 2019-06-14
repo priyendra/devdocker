@@ -89,12 +89,17 @@ RUN mkdir -p $SRCDIR
     envFlags = []
     if 'environment' in dir(cfg):
       for var, value in cfg.environment.items():
-        envFlags.append('-e')
-        envFlags.append('%s=%s' % (var, value % {
+        envFlags.extend(['-e', '%s=%s' % (var, value % {
           'SRCDIR': srcdir,
           'HOMEDIR': homedir,
-        }))
-    print 'envFlags', envFlags
+        })])
+    mountFlags = [ '-v', '%s:%s' % (srcdir, srcdir) ]
+    if 'mount' in dir(cfg):
+      for m in cfg.mount:
+        mountFlags.extend(['-v', m % {
+          'SRCDIR': srcdir,
+          'HOMEDIR': homedir,
+        }])
     # Delete any existing container with the provided containerName
     subprocess.call(
         ['docker', 'rm', '-f', cfg.containerName],
@@ -103,8 +108,8 @@ RUN mkdir -p $SRCDIR
     subprocess.check_call(
         ['docker', 'run', '-d', '-i', '-t' ] +
         envFlags +
-        ['-v', '%s:%s' % (srcdir, srcdir),
-         '--name=%s' % cfg.containerName, '--privileged', imgid])
+        mountFlags +
+        ['--name=%s' % cfg.containerName, '--privileged', imgid])
   finally:
     shutil.rmtree(tmpdir)
 
