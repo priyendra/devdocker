@@ -8,18 +8,19 @@
 
 # devdocker create
 #   Creates a docker container that encapsulates the build environment for the
-#   project. The gitroot is mounted inside this container at ~/src. That is
-#   also taken to be the working directory for all commands executed inside
-#   the container via devdocker exec. Additional directories can be mounted
-#   inside the container by specifying them in the devdocker config file.
+#   project. The gitroot is mounted inside this container at the same path.
+#   That is also taken to be the working directory for all commands executed
+#   inside the container via devdocker exec. Additional directories can be
+#   mounted inside the container by specifying them in the devdocker config
+#   file.
 
 # devdocker exec [ARG [ARGS...]]
-#   Runs the supplied command inside the said container. The /src directory is
+#   Runs the supplied command inside the said container. The src directory is
 #   the working directory for these commands.
 #   For example: $ devdocker exec ls -l
 
 # devdocker shell
-#   Starts an interactive shell inside the said container with the /src
+#   Starts an interactive shell inside the said container with the src
 #   directory as the current working directory. By default, the shell can
 #   have messed up column width. One workaround is to resize the terminal
 #   window which seems to fix the issue.
@@ -61,15 +62,17 @@ FROM ${BASE_IMAGE}
 
 ARG UID
 ARG HOMEDIR
+ARG SRCDIR
 RUN mkdir -p $(dirname $HOMEDIR)
 RUN useradd -u $UID -m -d $HOMEDIR devdocker
 RUN echo "devdocker ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
 USER devdocker
-WORKDIR $HOMEDIR/src
+WORKDIR $SRCDIR
 # The following command must work even if .bashrc does not exist and is
 # therefore written in a very specific non-obvious manner.
 COPY Dockerfile .bashrc* $HOMEDIR/
 RUN rm $HOMEDIR/Dockerfile
+RUN mkdir -p $SRCDIR
       """)
     devnull = open(os.devnull, 'w')
     cfg = readConfig(args, unknownArgs)
@@ -81,15 +84,26 @@ RUN rm $HOMEDIR/Dockerfile
          '--build-arg', 'BASE_IMAGE=%s' % cfg.imageTag,
          '--build-arg', 'UID=%d' % os.getuid(),
          '--build-arg', 'HOMEDIR=%s' % homedir,
+         '--build-arg', 'SRCDIR=%s' % srcdir,
          '--tag=%s' % imgid, tmpdir])
+    envFlags = []
+    if 'environment' in dir(cfg):
+      for var, value in cfg.environment.items():
+        envFlags.append('-e')
+        envFlags.append('%s=%s' % (var, value % {
+          'SRCDIR': srcdir,
+          'HOMEDIR': homedir,
+        }))
+    print 'envFlags', envFlags
     # Delete any existing container with the provided containerName
     subprocess.call(
         ['docker', 'rm', '-f', cfg.containerName],
         stdout = devnull, stderr = devnull)
     print 'Starting devdocker ...'
     subprocess.check_call(
-        ['docker', 'run', '-d', '-i', '-t',
-         '-v', '%s:%s/src' % (srcdir, homedir),
+        ['docker', 'run', '-d', '-i', '-t' ] +
+        envFlags +
+        ['-v', '%s:%s' % (srcdir, srcdir),
          '--name=%s' % cfg.containerName, '--privileged', imgid])
   finally:
     shutil.rmtree(tmpdir)

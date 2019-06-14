@@ -1,0 +1,12 @@
+# This is a python code snippet that evaluates to a dictionary.
+# We use this dictionary to represent the devdocker config file.
+{
+  "registry": "registry.hub.docker.com",
+  "imageName": "priyendra/devdocker-golang",
+  "imageVersion": "v1.0",
+  "containerName": "devdocker-golang",
+  "dockerFile": "devdocker/Dockerfile",
+  "environment": {
+    "GOPATH": "%(SRCDIR)s"
+  }
+}
