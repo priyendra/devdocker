@@ -1,0 +1,173 @@
+#! /usr/bin/python
+
+# @devdocker is a utility meant to "manage" a docker container that
+# encapsulates the build environment for a project. In addition, it can be
+# used to build docker images with the project's build environment. @devdocker
+# commands must be executed from gitroot. Devdocker supports the following
+# commands.
+
+# devdocker create
+#   Creates a docker container that encapsulates the build environment for the
+#   project. The gitroot is mounted inside this container at ~/src. That is
+#   also taken to be the working directory for all commands executed inside
+#   the container via devdocker exec. Additional directories can be mounted
+#   inside the container by specifying them in the devdocker config file.
+
+# devdocker exec [ARG [ARGS...]]
+#   Runs the supplied command inside the said container. The /src directory is
+#   the working directory for these commands.
+#   For example: $ devdocker exec ls -l
+
+# devdocker shell
+#   Starts an interactive shell inside the said container with the /src
+#   directory as the current working directory. By default, the shell can
+#   have messed up column width. One workaround is to resize the terminal
+#   window which seems to fix the issue.
+
+# devdocker mkimg
+#   Builds the docker images required for the dev container. In addition,
+#   the images are tagged with version numbers taken from the devdocker config
+#   file. Finally, it also prints a set of commands that can be used to
+#   publish this image to the docker registry. We do not include the publish
+#   functionality as part of the devdocker tool itself since that requires
+#   access to docker login credentials etc.
+
+import argparse
+import os
+import shutil
+import subprocess
+import sys
+import tempfile
+import uuid
+
+def readConfig(args, unknownArgs):
+  class Object:
+    pass
+  cfg = Object()
+  with open(args.cfg) as cfgFile:
+    configDict = eval(cfgFile.read())
+    cfg.__dict__.update(configDict)
+    cfg.imageTag =\
+        '%s/%s:%s' % (cfg.registry, cfg.imageName, cfg.imageVersion)
+  return cfg
+
+def createFn(args, unknownArgs):
+  tmpdir = tempfile.mkdtemp()
+  try:
+    with open(tmpdir + '/Dockerfile', 'w') as localDockerFile:
+      localDockerFile.write("""
+ARG BASE_IMAGE
+FROM ${BASE_IMAGE}
+
+ARG UID
+ARG HOMEDIR
+RUN mkdir -p $(dirname $HOMEDIR)
+RUN useradd -u $UID -m -d $HOMEDIR devdocker
+RUN echo "devdocker ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
+USER devdocker
+WORKDIR $HOMEDIR/src
+# The following command must work even if .bashrc does not exist and is
+# therefore written in a very specific non-obvious manner.
+COPY Dockerfile .bashrc* $HOMEDIR/
+RUN rm $HOMEDIR/Dockerfile
+      """)
+    devnull = open(os.devnull, 'w')
+    cfg = readConfig(args, unknownArgs)
+    homedir = os.path.expanduser('~')
+    srcdir = os.getcwd()
+    imgid = 'devdocker-local-' + str(uuid.uuid4())
+    subprocess.check_call(
+        ['docker', 'image', 'build',
+         '--build-arg', 'BASE_IMAGE=%s' % cfg.imageTag,
+         '--build-arg', 'UID=%d' % os.getuid(),
+         '--build-arg', 'HOMEDIR=%s' % homedir,
+         '--tag=%s' % imgid, tmpdir])
+    # Delete any existing container with the provided containerName
+    subprocess.call(
+        ['docker', 'rm', '-f', cfg.containerName],
+        stdout = devnull, stderr = devnull)
+    print 'Starting devdocker ...'
+    subprocess.check_call(
+        ['docker', 'run', '-d', '-i', '-t',
+         '-v', '%s:%s/src' % (srcdir, homedir),
+         '--name=%s' % cfg.containerName, '--privileged', imgid])
+  finally:
+    shutil.rmtree(tmpdir)
+
+def execFn(args, unknownArgs):
+  cfg = readConfig(args, unknownArgs)
+  if args.interactive:
+    sys.exit(subprocess.call(
+        ['docker', 'exec', '-it', cfg.containerName] + unknownArgs))
+  else:
+    sys.exit(subprocess.call(
+        ['docker', 'exec', cfg.containerName] + unknownArgs))
+
+def shellFn(args, unknownArgs):
+  cfg = readConfig(args, unknownArgs)
+  subprocess.call(
+      ['docker', 'exec', '-it', cfg.containerName, '/bin/bash'])
+
+def mkImgFn(args, unknownArgs):
+  cfg = readConfig(args, unknownArgs)
+  subprocess.check_call(
+      ['docker', 'image', 'build', '--tag=%s' % cfg.imageTag,
+       '-f', cfg.dockerFile, os.path.dirname(cfg.dockerFile)])
+  print '\n\nSuccessfully created image: %s' % cfg.imageTag
+  print 'Publish image to repository using the following commands: '
+  print '  $ docker login ' + cfg.registry
+  print '  $ docker push ' + cfg.imageTag
+
+def ArgParser():
+  parser = argparse.ArgumentParser(
+    prog = 'devdocker',
+    description = 'Utility for creating/managing the dev container')
+  parser.add_argument(
+    '--cfg',
+    default = '.devdockercfg',
+    help = 'Filename containing the devdocker config')
+  subparsers = parser.add_subparsers(
+    title = 'subcommands',
+    help = 'execute commands with -h for further help')
+
+  # create command
+  createP = subparsers.add_parser(
+      'create',
+      description = 'Create the dev container',
+      help = 'Create the dev container')
+  createP.set_defaults(func = createFn)
+
+  # exec command
+  execP = subparsers.add_parser(
+      'exec',
+      description = 'Execute a command inside the dev container',
+      help = 'Execute a command inside the dev container')
+  execP.add_argument(
+    '-i', '--interactive', dest = 'interactive', action = 'store_true',
+    help = 'Execute interactive commands like gdb etc.')
+  execP.set_defaults(interactive = False)
+  execP.set_defaults(func = execFn)
+
+  # shell command
+  shellP = subparsers.add_parser(
+      'shell',
+      description = 'Start an interactive shell within the dev container',
+      help = 'Start an interactive shell within the dev container')
+  shellP.set_defaults(func = shellFn)
+
+  # mkimg command
+  mkimgP = subparsers.add_parser(
+      'mkimg',
+      description = 'Builds the docker image for the dev container',
+      help = 'Builds the docker image for the dev container')
+  mkimgP.set_defaults(func = mkImgFn)
+
+  return parser
+
+def main(argv):
+  parser = ArgParser()
+  args, unknownArgs = parser.parse_known_args()
+  args.func(args, unknownArgs)
+
+if __name__ == '__main__':
+  main(sys.argv)

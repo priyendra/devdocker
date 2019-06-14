@@ -1,0 +1,9 @@
+# This is a python code snippet that evaluates to a dictionary.
+# We use this dictionary to represent the devdocker config file.
+{
+  "registry": "registry.hub.docker.com",
+  "imageName": "priyendra/devdocker-cpp",
+  "imageVersion": "v1.0",
+  "containerName": "devdocker-cpp",
+  "dockerFile": "devdocker/Dockerfile"
+}
