@@ -41,19 +41,30 @@ import sys
 import tempfile
 import uuid
 
-def readConfig(args, unknownArgs):
+def readDict(fileName):
   class Object:
     pass
-  cfg = Object()
-  with open(args.cfg) as cfgFile:
-    configDict = eval(cfgFile.read())
-    cfg.__dict__.update(configDict)
-    cfg.imageTag =\
-        '%s/%s:%s' % (cfg.registry, cfg.imageName, cfg.imageVersion)
+  obj = Object()
+  with open(fileName) as f:
+    obj.__dict__.update(eval(f.read()))
+  return obj
+
+def readConfig(args, unknownArgs):
+  cfg = readDict(args.cfg)
+  cfg.imageTag = '%s/%s:%s' % (cfg.registry, cfg.imageName, cfg.imageVersion)
   return cfg
 
 def createFn(args, unknownArgs):
-  tmpdir = tempfile.mkdtemp()
+  cfg = readConfig(args, unknownArgs)
+  homedir = os.path.expanduser('~')
+  srcdir = os.getcwd()
+  substitutions = {
+    'SRCDIR': srcdir,
+    'HOMEDIR': homedir,
+  }
+  tmpdir = "/tmp/devdocker.local"
+  shutil.rmtree(tmpdir, ignore_errors=True)
+  shutil.copytree(os.path.dirname(cfg.dockerFile), tmpdir)
   try:
     with open(tmpdir + '/Dockerfile', 'w') as localDockerFile:
       localDockerFile.write("""
@@ -68,16 +79,16 @@ RUN useradd -u $UID -m -d $HOMEDIR devdocker
 RUN echo "devdocker ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
 USER devdocker
 WORKDIR $SRCDIR
-# The following command must work even if .bashrc does not exist and is
-# therefore written in a very specific non-obvious manner.
-COPY Dockerfile .bashrc* $HOMEDIR/
-RUN rm $HOMEDIR/Dockerfile
 RUN mkdir -p $SRCDIR
       """)
+      myCfg = readDict(args.mycfg)
+      for e in myCfg.files:
+        localDockerFile.write(
+          'COPY %s %s\n' % (
+              e['src'] % substitutions,
+              e['dst'] % substitutions
+        ))
     devnull = open(os.devnull, 'w')
-    cfg = readConfig(args, unknownArgs)
-    homedir = os.path.expanduser('~')
-    srcdir = os.getcwd()
     imgid = 'devdocker-local-' + str(uuid.uuid4())
     subprocess.check_call(
         ['docker', 'image', 'build',
@@ -89,17 +100,11 @@ RUN mkdir -p $SRCDIR
     envFlags = []
     if 'environment' in dir(cfg):
       for var, value in cfg.environment.items():
-        envFlags.extend(['-e', '%s=%s' % (var, value % {
-          'SRCDIR': srcdir,
-          'HOMEDIR': homedir,
-        })])
+        envFlags.extend(['-e', '%s=%s' % (var, value % substitutions)])
     mountFlags = [ '-v', '%s:%s' % (srcdir, srcdir) ]
     if 'mount' in dir(cfg):
       for m in cfg.mount:
-        mountFlags.extend(['-v', m % {
-          'SRCDIR': srcdir,
-          'HOMEDIR': homedir,
-        }])
+        mountFlags.extend(['-v', m % substitutions])
     # Delete any existing container with the provided containerName
     subprocess.call(
         ['docker', 'rm', '-f', cfg.containerName],
@@ -111,7 +116,8 @@ RUN mkdir -p $SRCDIR
         mountFlags +
         ['--name=%s' % cfg.containerName, '--privileged', imgid])
   finally:
-    shutil.rmtree(tmpdir)
+    # shutil.rmtree(tmpdir)
+    pass
 
 def execFn(args, unknownArgs):
   cfg = readConfig(args, unknownArgs)
@@ -145,6 +151,10 @@ def ArgParser():
     '--cfg',
     default = '.devdockercfg',
     help = 'Filename containing the devdocker config')
+  parser.add_argument(
+    '--mycfg',
+    default = '.mydevdocker',
+    help = 'Filename containing the mydevdocker config')
   subparsers = parser.add_subparsers(
     title = 'subcommands',
     help = 'execute commands with -h for further help')

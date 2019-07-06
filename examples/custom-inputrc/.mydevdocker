@@ -1,0 +1,10 @@
+# This is a python code snippet that evaluates to a dictionary.
+# We use this dictionary to represent the devdocker config file.
+{
+  "files": [
+    {
+      "src": "myinputrc",
+      "dst": "/%(HOMEDIR)s/.inputrc"
+    }
+  ]
+}
