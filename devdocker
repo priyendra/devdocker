@@ -81,15 +81,16 @@ USER devdocker
 WORKDIR $SRCDIR
 RUN mkdir -p $SRCDIR
       """)
-      myCfg = readDict(args.mycfg)
-      for e in myCfg.files:
-        localDockerFile.write(
-          'COPY %s %s\n' % (
-              e['src'] % substitutions,
-              e['dst'] % substitutions
-        ))
+      if os.path.exists(args.mycfg):
+        myCfg = readDict(args.mycfg)
+        for e in myCfg.files:
+          localDockerFile.write(
+            'COPY %s %s\n' % (
+                e['src'] % substitutions,
+                e['dst'] % substitutions
+          ))
     devnull = open(os.devnull, 'w')
-    imgid = 'devdocker-local-' + str(uuid.uuid4())
+    imgid = 'devdocker-' + str(uuid.uuid4())
     subprocess.check_call(
         ['docker', 'image', 'build',
          '--build-arg', 'BASE_IMAGE=%s' % cfg.imageTag,
