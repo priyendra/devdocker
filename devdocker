@@ -120,6 +120,7 @@ RUN mkdir -p $SRCDIR
     # shutil.rmtree(tmpdir)
     pass
 
+# TODO: Transmit CTRL-C to child process inside container.
 def execFn(args, unknownArgs):
   cfg = readConfig(args, unknownArgs)
   if args.interactive:
