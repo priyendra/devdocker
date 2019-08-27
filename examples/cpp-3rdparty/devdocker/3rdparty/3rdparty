@@ -3,6 +3,7 @@
 import argparse
 import os
 import shutil
+import stat
 import subprocess
 import sys
 import yaml
@@ -30,8 +31,21 @@ def mkLib(args, unknownArgs):
   cfg = readLibConfig(args.library)
   fetchLib(args, unknownArgs)
   env = os.environ.copy()
+  # Define other environment variables (CFLAGS etc)
   env['EXTERNAL_LIB'] = cfg['name']
-  subprocess.check_call(['/3rdparty/build-outer.sh'], env=env)
+  env['PARALLELISM'] = '10'
+  tmpScriptFileName = "/tmp/3rdparty"
+  with open(tmpScriptFileName, 'w') as tmpScript:
+    tmpScript.write("""
+#! /bin/bash
+
+set -e -o pipefail
+
+pushd devdocker/3rdparty/$EXTERNAL_LIB/src-gitignore > /dev/null
+source ../build.sh
+popd > /dev/null
+    """)
+  subprocess.check_call(['/bin/bash', tmpScriptFileName], env=env)
   if args.cleanup:
     src = libSrcDir(cfg['name'])
     shutil.rmtree(src, ignore_errors = True)
@@ -75,4 +89,3 @@ def main(argv):
 
 if __name__ == '__main__':
   main(sys.argv)
-
