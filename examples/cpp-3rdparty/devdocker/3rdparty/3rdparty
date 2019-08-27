@@ -6,33 +6,39 @@ import shutil
 import stat
 import subprocess
 import sys
-import yaml
+
+def readDict(fileName):
+  class Object:
+    pass
+  obj = Object()
+  with open(fileName) as f:
+    obj.__dict__.update(eval(f.read()))
+  return obj
 
 def readLibConfig(library):
-  with open('devdocker/3rdparty/%s/config.yaml' % library) as yf:
-    return yaml.safe_load(yf)
+  return readDict('devdocker/3rdparty/%s/config' % library)
 
 def libSrcDir(library):
   return 'devdocker/3rdparty/%s/src-gitignore' % library
 
 def fetchLib(args, unknownArgs):
   cfg = readLibConfig(args.library)
-  src = libSrcDir(cfg['name'])
+  src = libSrcDir(cfg.name)
   # Fetch the source code for the library
   shutil.rmtree(src, ignore_errors = True)
-  if 'custom' in cfg:
+  if hasattr(cfg, 'custom'):
     os.makedirs(src)
-    subprocess.check_call([cfg['custom']], cwd = src, shell = True)
+    subprocess.check_call([cfg.custom], cwd = src, shell = True)
   else:
-    subprocess.check_call(['git', 'clone', cfg['git'], src])
-    subprocess.check_call(['git', 'checkout', cfg['commit']], cwd = src)
+    subprocess.check_call(['git', 'clone', cfg.git, src])
+    subprocess.check_call(['git', 'checkout', cfg.commit], cwd = src)
 
 def mkLib(args, unknownArgs):
   cfg = readLibConfig(args.library)
   fetchLib(args, unknownArgs)
   env = os.environ.copy()
   # Define other environment variables (CFLAGS etc)
-  env['EXTERNAL_LIB'] = cfg['name']
+  env['EXTERNAL_LIB'] = cfg.name
   env['PARALLELISM'] = '10'
   tmpScriptFileName = "/tmp/3rdparty"
   with open(tmpScriptFileName, 'w') as tmpScript:
@@ -47,7 +53,7 @@ popd > /dev/null
     """)
   subprocess.check_call(['/bin/bash', tmpScriptFileName], env=env)
   if args.cleanup:
-    src = libSrcDir(cfg['name'])
+    src = libSrcDir(cfg.name)
     shutil.rmtree(src, ignore_errors = True)
 
 def argParser():

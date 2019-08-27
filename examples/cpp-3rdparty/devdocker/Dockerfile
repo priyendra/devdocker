@@ -7,11 +7,9 @@ RUN apt-get update && apt-get install -y \
       git \
       man-db \
       python \
-      python-pip \
       software-properties-common \
       sudo \
       vim
-RUN pip install pyyaml
 
 # Copy core files needed to build 3rd party libs.
 COPY 3rdparty/3rdparty /3rdparty/

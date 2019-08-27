@@ -1,0 +1,7 @@
+# This is a python code snippet that evaluates to a dictionary.
+# We use this dictionary to represent the 3rdparty config file.
+{
+  "name": "gflags",
+  "git": "https://github.com/gflags/gflags.git",
+  "commit": "v2.2.1",
+}
