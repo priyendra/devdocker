@@ -2,21 +2,21 @@
 
 # @devdocker is a utility meant to "manage" a docker container that
 # encapsulates the build environment for a project. In addition, it can be
-# used to build docker images with the project's build environment. @devdocker
-# commands must be executed from gitroot. Devdocker supports the following
-# commands.
+# used to build docker images with the project's build environment.
+# @devdocker commands must be executed from gitroot. Devdocker supports the
+# following commands.
 
 # devdocker create
-#   Creates a docker container that encapsulates the build environment for the
-#   project. The gitroot is mounted inside this container at the same path.
-#   That is also taken to be the working directory for all commands executed
-#   inside the container via devdocker exec. Additional directories can be
-#   mounted inside the container by specifying them in the devdocker config
-#   file.
+#   Creates a docker container that encapsulates the build environment for
+#   the project. The gitroot is mounted inside this container at the same
+#   path. That is also taken to be the working directory for all commands
+#   executed inside the container via devdocker exec. Additional
+#   directories can be mounted inside the container by specifying them in
+#   the devdocker config file.
 
 # devdocker exec [ARG [ARGS...]]
-#   Runs the supplied command inside the said container. The src directory is
-#   the working directory for these commands.
+#   Runs the supplied command inside the said container. The src directory
+#   is the working directory for these commands.
 #   For example: $ devdocker exec ls -l
 
 # devdocker shell
@@ -27,11 +27,11 @@
 
 # devdocker mkimg
 #   Builds the docker images required for the dev container. In addition,
-#   the images are tagged with version numbers taken from the devdocker config
-#   file. Finally, it also prints a set of commands that can be used to
-#   publish this image to the docker registry. We do not include the publish
-#   functionality as part of the devdocker tool itself since that requires
-#   access to docker login credentials etc.
+#   the images are tagged with version numbers taken from the devdocker
+#   config file. Finally, it also prints a set of commands that can be used
+#   to publish this image to the docker registry. We do not include the
+#   publish functionality as part of the devdocker tool itself since that
+#   requires access to docker login credentials etc.
 
 import argparse
 import os
@@ -51,7 +51,8 @@ def readDict(fileName):
 
 def readConfig(args, unknownArgs):
   cfg = readDict(args.cfg)
-  cfg.imageTag = '%s/%s:%s' % (cfg.registry, cfg.imageName, cfg.imageVersion)
+  cfg.imageTag = '%s/%s:%s' % (
+      cfg.registry, cfg.imageName, cfg.imageVersion)
   return cfg
 
 def createFn(args, unknownArgs):
