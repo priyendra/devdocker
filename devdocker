@@ -41,6 +41,24 @@ import sys
 import tempfile
 import uuid
 
+kCfgFileName = '.devdockercfg'
+kMyCfgFileName = '.mydevdockercfg'
+
+class MissingConfigFileError(Exception):
+  def __init__(self):
+    pass
+
+def findCfgFile():
+  currDir = os.path.abspath(os.getcwd())
+  while not os.path.exists(os.path.join(currDir, kCfgFileName)):
+    if currDir == '/':
+      raise MissingConfigFileError()
+    currDir = os.path.dirname(currDir)
+  return os.path.join(currDir, kCfgFileName)
+
+def findMyCfgFile():
+  return os.path.join(os.path.dirname(findCfgFile()), kMyCfgFileName)
+
 def readDict(fileName):
   class Object:
     pass
@@ -49,14 +67,14 @@ def readDict(fileName):
     obj.__dict__.update(eval(f.read()))
   return obj
 
-def readConfig(args, unknownArgs):
-  cfg = readDict(args.cfg)
+def readConfig():
+  cfg = readDict(findCfgFile())
   cfg.imageTag = '%s/%s:%s' % (
       cfg.registry, cfg.imageName, cfg.imageVersion)
   return cfg
 
 def createFn(args, unknownArgs):
-  cfg = readConfig(args, unknownArgs)
+  cfg = readConfig()
   homedir = os.path.expanduser('~')
   srcdir = os.getcwd()
   substitutions = {
@@ -82,8 +100,9 @@ USER devdocker
 WORKDIR $SRCDIR
 RUN mkdir -p $SRCDIR
       """)
-      if os.path.exists(args.mycfg):
-        myCfg = readDict(args.mycfg)
+      myCfgFile = findMyCfgFile()
+      if os.path.exists(myCfgFile):
+        myCfg = readDict(myCfgFile)
         for e in myCfg.files:
           localDockerFile.write(
             'COPY %s %s\n' % (
@@ -128,21 +147,28 @@ RUN mkdir -p $SRCDIR
 
 # TODO: Transmit CTRL-C to child process inside container.
 def execFn(args, unknownArgs):
-  cfg = readConfig(args, unknownArgs)
+  cfg = readConfig()
+  # We setup devdocker containers such that absolute paths outside the
+  # container also work inside the container.
+  workingDir = os.path.abspath(os.getcwd())
   if args.interactive:
     sys.exit(subprocess.call(
-        ['docker', 'exec', '-it', cfg.containerName] + unknownArgs))
+        ['docker', 'exec', '-it', '-w', workingDir, cfg.containerName] + \
+        unknownArgs))
   else:
     sys.exit(subprocess.call(
-        ['docker', 'exec', cfg.containerName] + unknownArgs))
+        ['docker', 'exec', '-w', workingDir, cfg.containerName] + \
+        unknownArgs))
 
 def shellFn(args, unknownArgs):
-  cfg = readConfig(args, unknownArgs)
+  cfg = readConfig()
+  workingDir = os.path.abspath(os.getcwd())
   subprocess.call(
-      ['docker', 'exec', '-it', cfg.containerName, '/bin/bash'])
+      ['docker', 'exec', '-it', '-w', workingDir,
+       cfg.containerName, '/bin/bash'])
 
 def mkImgFn(args, unknownArgs):
-  cfg = readConfig(args, unknownArgs)
+  cfg = readConfig()
   subprocess.check_call(
       ['docker', 'image', 'build', '--tag=%s' % cfg.imageTag,
        '-f', cfg.dockerFile, os.path.dirname(cfg.dockerFile)])
@@ -155,14 +181,6 @@ def ArgParser():
   parser = argparse.ArgumentParser(
     prog = 'devdocker',
     description = 'Utility for creating/managing the dev container')
-  parser.add_argument(
-    '--cfg',
-    default = '.devdockercfg',
-    help = 'Filename containing the devdocker config')
-  parser.add_argument(
-    '--mycfg',
-    default = '.mydevdocker',
-    help = 'Filename containing the mydevdocker config')
   subparsers = parser.add_subparsers(
     title = 'subcommands',
     help = 'execute commands with -h for further help')
@@ -227,4 +245,8 @@ def main(argv):
   args.func(args, unknownArgs + escapedArgs)
 
 if __name__ == '__main__':
+  try:
     main(sys.argv[1:])
+  except MissingConfigFileError:
+    sys.stderr.write('.devdockercfg not found in any parent directory\n')
+    sys.exit(1)
