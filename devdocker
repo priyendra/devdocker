@@ -201,9 +201,29 @@ def ArgParser():
   return parser
 
 def main(argv):
+  # Sometimes the commandline being executed with devdocker exec can
+  # have arguments that conflict with the command line parsing of the
+  # devdocker script itself. For example, if the exec command has its own
+  # --help argument, that can be interpreted as the --help argument of the
+  # devdocker command. In such situations, we can separate the two command
+  # lines by providing a -- escape marker. For example, the following
+  # command will not print the gcc help message as intended.
+  #   $ devdocker exec gcc --help
+  # However, after adding a -- escape marker, we will get the expected
+  # help message.
+  #   $ devdocker exec -- gcc --help
+  escapeMarker = -1
+  try:
+    escapeMarker = argv.index('--')
+  except:
+    pass
+  escapedArgs = []
+  if escapeMarker >= 0:
+    escapedArgs = argv[escapeMarker + 1:]
+    argv = argv[:escapeMarker]
   parser = ArgParser()
-  args, unknownArgs = parser.parse_known_args()
-  args.func(args, unknownArgs)
+  args, unknownArgs = parser.parse_known_args(args = argv)
+  args.func(args, unknownArgs + escapedArgs)
 
 if __name__ == '__main__':
-  main(sys.argv)
+    main(sys.argv[1:])
