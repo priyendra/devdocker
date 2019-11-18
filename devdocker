@@ -73,6 +73,16 @@ def readConfig():
       cfg.registry, cfg.imageName, cfg.imageVersion)
   return cfg
 
+# A simple wrapper around subprocess.Popen with proper handling for Ctrl-C.
+# Ctrl-C events are routed to the underlying subprocess.
+def popenWrapper(argv):
+  try:
+    pid = subprocess.Popen(argv)
+    pid.wait()
+  except KeyboardInterrupt:
+    pid.kill()
+  return pid.returncode
+
 def createFn(args, unknownArgs):
   cfg = readConfig()
   homedir = os.path.expanduser('~')
@@ -141,22 +151,24 @@ RUN mkdir -p $SRCDIR
         mountFlags +
         portFlags +
         ['--name=%s' % cfg.containerName, '--privileged', imgid])
+    # Run any post-create commands after container creation.
+    if 'postCreateCmds' in dir(cfg):
+      for cmd in cfg.postCreateCmds:
+        popenWrapper(['docker', 'exec', cfg.containerName] + cmd)
   finally:
-    # shutil.rmtree(tmpdir)
-    pass
+    shutil.rmtree(tmpdir)
 
-# TODO: Transmit CTRL-C to child process inside container.
 def execFn(args, unknownArgs):
   cfg = readConfig()
   # We setup devdocker containers such that absolute paths outside the
   # container also work inside the container.
   workingDir = os.path.abspath(os.getcwd())
   if args.interactive:
-    sys.exit(subprocess.call(
+    sys.exit(popenWrapper(
         ['docker', 'exec', '-it', '-w', workingDir, cfg.containerName] + \
         unknownArgs))
   else:
-    sys.exit(subprocess.call(
+    sys.exit(popenWrapper(
         ['docker', 'exec', '-w', workingDir, cfg.containerName] + \
         unknownArgs))
 
