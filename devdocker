@@ -120,14 +120,12 @@ RUN mkdir -p $SRCDIR
                 e['dst'] % substitutions
           ))
     devnull = open(os.devnull, 'w')
-    imgid = 'devdocker-' + str(uuid.uuid4())
-    subprocess.check_call(
-        ['docker', 'image', 'build',
+    imgDigest = subprocess.check_output(
+        ['docker', 'image', 'build', '-q',
          '--build-arg', 'BASE_IMAGE=%s' % cfg.imageTag,
          '--build-arg', 'UID=%d' % os.getuid(),
          '--build-arg', 'HOMEDIR=%s' % homedir,
-         '--build-arg', 'SRCDIR=%s' % srcdir,
-         '--tag=%s' % imgid, tmpdir])
+         '--build-arg', 'SRCDIR=%s' % srcdir, tmpdir]).strip()
     envFlags = []
     if 'environment' in dir(cfg):
       for var, value in cfg.environment.items():
@@ -150,7 +148,7 @@ RUN mkdir -p $SRCDIR
         envFlags +
         mountFlags +
         portFlags +
-        ['--name=%s' % cfg.containerName, '--privileged', imgid])
+        ['--name=%s' % cfg.containerName, '--privileged', imgDigest])
     # Run any post-create commands after container creation.
     if 'postCreateCmds' in dir(cfg):
       for cmd in cfg.postCreateCmds:
