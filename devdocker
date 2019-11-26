@@ -35,10 +35,12 @@
 
 import argparse
 import os
+import pipes
 import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import uuid
 
 kCfgFileName = '.devdockercfg'
@@ -93,7 +95,7 @@ def createFn(args, unknownArgs):
   }
   tmpdir = "/tmp/devdocker.local"
   shutil.rmtree(tmpdir, ignore_errors=True)
-  shutil.copytree(os.path.dirname(cfg.dockerFile), tmpdir)
+  os.mkdir(tmpdir, 0o755)
   try:
     with open(tmpdir + '/Dockerfile', 'w') as localDockerFile:
       localDockerFile.write("""
@@ -142,7 +144,6 @@ RUN mkdir -p $SRCDIR
     subprocess.call(
         ['docker', 'rm', '-f', cfg.containerName],
         stdout = devnull, stderr = devnull)
-    print 'Starting devdocker ...'
     subprocess.check_call(
         ['docker', 'run', '-d', '-i', '-t' ] +
         envFlags +
@@ -162,9 +163,13 @@ def execFn(args, unknownArgs):
   # container also work inside the container.
   workingDir = os.path.abspath(os.getcwd())
   if args.interactive:
+    # We inject a super-hacky sleep statement because for some weird
+    # reason the terminal behavior (number of columns etc) are properly
+    # setup in the presence of that sleep statement.
+    joinedArgs = ' '.join(map(lambda x : pipes.quote(x), unknownArgs))
     sys.exit(popenWrapper(
         ['docker', 'exec', '-it', '-w', workingDir, cfg.containerName] + \
-        unknownArgs))
+        ['bash', '-c', 'sleep 0.05 && %s' % joinedArgs]))
   else:
     sys.exit(popenWrapper(
         ['docker', 'exec', '-w', workingDir, cfg.containerName] + \
