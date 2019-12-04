@@ -37,6 +37,7 @@ import argparse
 import os
 import pipes
 import shutil
+import socket
 import subprocess
 import sys
 import tempfile
@@ -82,6 +83,8 @@ def popenWrapper(argv):
     pid = subprocess.Popen(argv)
     pid.wait()
   except KeyboardInterrupt:
+    print "WARNING: Ctrl-C does not kill the underlying process. The \n" +\
+          "proces is (most likely) still running inside the container"
     pid.kill()
   return pid.returncode
 
@@ -128,7 +131,10 @@ RUN mkdir -p $SRCDIR
          '--build-arg', 'UID=%d' % os.getuid(),
          '--build-arg', 'HOMEDIR=%s' % homedir,
          '--build-arg', 'SRCDIR=%s' % srcdir, tmpdir]).strip()
-    envFlags = []
+    envFlags = [
+      '-e', 'DEVDOCKER_HOST=%s' % socket.gethostbyname(
+          socket.gethostname())
+    ]
     if 'environment' in dir(cfg):
       for var, value in cfg.environment.items():
         envFlags.extend(['-e', '%s=%s' % (var, value % substitutions)])
