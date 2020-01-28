@@ -159,7 +159,9 @@ RUN mkdir -p $SRCDIR
     # Run any post-create commands after container creation.
     if 'postCreateCmds' in dir(cfg):
       for cmd in cfg.postCreateCmds:
-        popenWrapper(['docker', 'exec', cfg.containerName] + cmd)
+        cmd = map(lambda x: x % substitutions, cmd)
+        popenWrapper(
+          ['docker', 'exec', cfg.containerName] + cmd)
   finally:
     shutil.rmtree(tmpdir)
 
