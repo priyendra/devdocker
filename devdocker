@@ -33,6 +33,10 @@
 #   publish functionality as part of the devdocker tool itself since that
 #   requires access to docker login credentials etc.
 
+# devdocker portfwd
+#   Helps users forward ports from inside docker containers to the host.
+#   Usage: devdocker portfwd <container port> [<host port>]
+
 import argparse
 import os
 import pipes
@@ -200,6 +204,20 @@ def mkImgFn(args, unknownArgs):
   print '  $ docker login ' + cfg.registry
   print '  $ docker push ' + cfg.imageTag
 
+def portfwdFn(args, unknownArgs):
+  try:
+    cfg = readConfig()
+    ip = subprocess.check_output([
+        'docker', 'inspect', cfg.containerName, '--format',
+        '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}'])
+    hostPort = args.containerPort if args.hostPort == 0 else args.hostPort
+    subprocess.check_call([
+        'docker', 'run', '--rm', '-p', '%d:1234' % hostPort, 'verb/socat',
+        'TCP-LISTEN:1234,fork',
+        'TCP-CONNECT:%s:%d' % (ip, args.containerPort)])
+  except KeyboardInterrupt:
+    pass
+    
 def ArgParser():
   parser = argparse.ArgumentParser(
     prog = 'devdocker',
@@ -239,6 +257,18 @@ def ArgParser():
       description = 'Builds the docker image for the dev container',
       help = 'Builds the docker image for the dev container')
   mkimgP.set_defaults(func = mkImgFn)
+
+  portfwdP = subparsers.add_parser(
+      'portfwd',
+      description = 'Forwards the port from container to host',
+      help = 'Builds the docker image for the dev container')
+  portfwdP.add_argument(
+      'containerPort', type = int, metavar = 'container-port',
+      help = 'The container port to forward')
+  portfwdP.add_argument(
+      'hostPort', type = int, metavar = 'host-port',
+      help = 'The host port to forward', nargs = '?', default = 0)
+  portfwdP.set_defaults(func = portfwdFn)
 
   return parser
 
