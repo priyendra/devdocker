@@ -173,7 +173,7 @@ def execFn(args, unknownArgs):
   cfg = readConfig()
   # We setup devdocker containers such that absolute paths outside the
   # container also work inside the container.
-  workingDir = os.path.abspath(os.getcwd())
+  workingDir = os.path.abspath(args.cwd)
   if args.interactive:
     # We inject a super-hacky sleep statement because for some weird
     # reason the terminal behavior (number of columns etc) are properly
@@ -242,6 +242,10 @@ def ArgParser():
     '-i', '--interactive', dest = 'interactive', action = 'store_true',
     help = 'Execute interactive commands like gdb etc.')
   execP.set_defaults(interactive = False)
+  execP.add_argument(
+    '--cwd', dest = 'cwd', action = 'store',
+    help = 'Set working directory for provided command.')
+  execP.set_defaults(cwd = '.')
   execP.set_defaults(func = execFn)
 
   # shell command
