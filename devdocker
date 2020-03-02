@@ -3,20 +3,19 @@
 # @devdocker is a utility meant to "manage" a docker container that
 # encapsulates the build environment for a project. In addition, it can be
 # used to build docker images with the project's build environment.
-# @devdocker commands must be executed from gitroot. Devdocker supports the
-# following commands.
+# Devdocker supports the following commands -
 
 # devdocker create
 #   Creates a docker container that encapsulates the build environment for
 #   the project. The gitroot is mounted inside this container at the same
-#   path. That is also taken to be the working directory for all commands
-#   executed inside the container via devdocker exec. Additional
-#   directories can be mounted inside the container by specifying them in
-#   the devdocker config file.
+#   path. Additional directories can be mounted inside the container by
+#   specifying them in the devdocker config file. Commands provided as
+#   @postCreateCmds in the ".devdockercfg" are executed with gitroot as the
+#   working directory.
 
 # devdocker exec [ARG [ARGS...]]
-#   Runs the supplied command inside the said container. The src directory
-#   is the working directory for these commands.
+#   Runs the supplied command inside the "devdocker" container. Current
+#   directory is setup to be the working directory for these commands.
 #   For example: $ devdocker exec ls -l
 
 # devdocker shell
@@ -26,16 +25,37 @@
 #   window which seems to fix the issue.
 
 # devdocker mkimg
-#   Builds the docker images required for the dev container. In addition,
+#   Builds the docker image required for the dev container. In addition,
 #   the images are tagged with version numbers taken from the devdocker
 #   config file. Finally, it also prints a set of commands that can be used
 #   to publish this image to the docker registry. We do not include the
 #   publish functionality as part of the devdocker tool itself since that
 #   requires access to docker login credentials etc.
-
+#
 # devdocker portfwd
 #   Helps users forward ports from inside docker containers to the host.
 #   Usage: devdocker portfwd <container port> [<host port>]
+#
+# @devdocker accepts configuration via file named ".devdockercfg". This
+# file should be placed at the gitroot of the project. The contents of
+# the config file is python code snippet file that evaluates to python
+# dictionary. ".devdockercfg" can have the following fields -
+#
+#   - registry, imageName, imageVersion: Image created by mkimg command is
+#     tagged with registry/imageName:imageVersion.
+#   - containerName:
+#   - dockerFile:
+#   - mount: List of files to be mounted inside the devdocker container.
+#     Each entry of the list must be of form 'host/path:container/path'.
+#   - ports: List of ports to be exported from the container. Each entry of
+#     list must be of the form 'host_ip:host_port:container_port/protocol'.
+#   - environment: Dictionary of environment variables initialized inside
+#     container.
+#   - postCreateCmds: Each command in this list is executed inside the
+#     container after its creation.
+#
+# Paths in .devdockercfg can refer to users home directory and source
+# directory of a project using %(HOMEDIR)s and %(SRCDIR)s respectively.
 
 import argparse
 import os
@@ -88,7 +108,7 @@ def popenWrapper(argv):
     pid.wait()
   except KeyboardInterrupt:
     print "WARNING: Ctrl-C does not kill the underlying process. The \n" +\
-          "proces is (most likely) still running inside the container"
+          "process is (most likely) still running inside the container"
     pid.kill()
   return pid.returncode
 
@@ -217,7 +237,7 @@ def portfwdFn(args, unknownArgs):
         'TCP-CONNECT:%s:%d' % (ip, args.containerPort)])
   except KeyboardInterrupt:
     pass
-    
+
 def ArgParser():
   parser = argparse.ArgumentParser(
     prog = 'devdocker',
