@@ -58,15 +58,16 @@
 # directory of a project using %(HOMEDIR)s and %(SRCDIR)s respectively.
 
 import argparse
+import datetime
 import os
 import pipes
+import uuid
 import shutil
 import socket
 import subprocess
 import sys
 import tempfile
 import time
-import uuid
 
 kCfgFileName = '.devdockercfg'
 kMyCfgFileName = '.mydevdockercfg'
@@ -219,12 +220,24 @@ def shellFn(args, unknownArgs):
 def mkImgFn(args, unknownArgs):
   cfg = readConfig()
   subprocess.check_call(
-      ['docker', 'image', 'build', '--tag=%s' % cfg.imageTag,
+      ['docker', 'image', 'build',
        '-f', cfg.dockerFile, os.path.dirname(cfg.dockerFile)])
-  print '\n\nSuccessfully created image: %s' % cfg.imageTag
-  print 'Publish image to repository using the following commands: '
-  print '  $ docker login ' + cfg.registry
-  print '  $ docker push ' + cfg.imageTag
+  # We issue the same build again with -q to get imageDigest. Because of
+  # docker caching this command will execute quite quickly.
+  imgDigest = subprocess.check_output(
+      ['docker', 'image', 'build', '-q',
+       '-f', cfg.dockerFile, os.path.dirname(cfg.dockerFile)]).strip()
+  newImageTag = '%s/%s:%s' % (
+      cfg.registry,
+      cfg.imageName,
+      datetime.datetime.now().strftime("%Y-%m-%d") + "-" + imgDigest[7:19])
+  subprocess.check_call(
+      ['docker', 'tag', imgDigest, newImageTag])
+  print '\n\nSuccessfully created image: %s' % newImageTag
+  print 'Login to the docker registry and publish image using the'
+  print 'following command: '
+  print '  $ docker push ' + newImageTag
+  print 'Update `imageVersion` in .devdockercfg to ' + newImageTag
 
 def portfwdFn(args, unknownArgs):
   try:
