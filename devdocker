@@ -205,17 +205,16 @@ def mkImgFn(args, unknownArgs):
   imgDigest = subprocess.check_output(
       ['docker', 'image', 'build', '-q',
        '-f', cfg.dockerFile, os.path.dirname(cfg.dockerFile)]).strip()
-  newImageTag = '%s/%s:%s' % (
-      cfg.registry,
-      cfg.imageName,
-      datetime.datetime.now().strftime("%Y-%m-%d") + "-" + imgDigest[7:19])
+  newImageVersion =\
+      datetime.datetime.now().strftime("%Y-%m-%d") + "-" + imgDigest[7:19]
+  newImageTag = '%s/%s:%s' % (cfg.registry, cfg.imageName, newImageVersion)
   subprocess.check_call(
       ['docker', 'tag', imgDigest, newImageTag])
   print '\n\nSuccessfully created image: %s' % newImageTag
   print 'Login to the docker registry and publish image using the'
   print 'following command: '
   print '  $ docker push ' + newImageTag
-  print 'Update `imageVersion` in .devdockercfg to ' + newImageTag
+  print 'Update `imageVersion` in .devdockercfg to ' + newImageVersion
 
 def portfwdFn(args, unknownArgs):
   try:
