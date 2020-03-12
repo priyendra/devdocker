@@ -113,6 +113,17 @@ def popenWrapper(argv):
     pid.kill()
   return pid.returncode
 
+def dockerImageBuild(args):
+  subprocess.check_call(['docker', 'image', 'build'] + args)
+  # We now execute the same command again to get the imgDigest by
+  # adding '-q' to the args. Since it is the same command, this
+  # executes quite quickly because of the docker cache. This "scheme"
+  # gives us best of both worlds as users get the progress updates
+  # in the first command and we are able to easily read the imgDigest
+  # from the second command.
+  return subprocess.check_output(
+      ['docker', 'image', 'build', '-q'] + args).strip()
+
 def createFn(args, unknownArgs):
   cfg = readConfig()
   homedir = os.path.expanduser('~')
@@ -150,12 +161,11 @@ RUN mkdir -p $SRCDIR
                 e['dst'] % substitutions
           ))
     devnull = open(os.devnull, 'w')
-    imgDigest = subprocess.check_output(
-        ['docker', 'image', 'build', '-q',
-         '--build-arg', 'BASE_IMAGE=%s' % cfg.imageTag,
+    imgDigest = dockerImageBuild(
+        ['--build-arg', 'BASE_IMAGE=%s' % cfg.imageTag,
          '--build-arg', 'UID=%d' % os.getuid(),
          '--build-arg', 'HOMEDIR=%s' % homedir,
-         '--build-arg', 'SRCDIR=%s' % srcdir, tmpdir]).strip()
+         '--build-arg', 'SRCDIR=%s' % srcdir, tmpdir])
     envFlags = [
       '-e', 'DEVDOCKER_HOST=%s' % socket.gethostbyname(
           socket.gethostname())
@@ -219,14 +229,8 @@ def shellFn(args, unknownArgs):
 
 def mkImgFn(args, unknownArgs):
   cfg = readConfig()
-  subprocess.check_call(
-      ['docker', 'image', 'build',
-       '-f', cfg.dockerFile, os.path.dirname(cfg.dockerFile)])
-  # We issue the same build again with -q to get imageDigest. Because of
-  # docker caching this command will execute quite quickly.
-  imgDigest = subprocess.check_output(
-      ['docker', 'image', 'build', '-q',
-       '-f', cfg.dockerFile, os.path.dirname(cfg.dockerFile)]).strip()
+  imgDigest = dockerImageBuild(
+       ['-f', cfg.dockerFile, os.path.dirname(cfg.dockerFile)])
   newImageVersion =\
       datetime.datetime.now().strftime("%Y-%m-%d") + "-" + imgDigest[7:19]
   newImageTag = '%s/%s:%s' % (cfg.registry, cfg.imageName, newImageVersion)
