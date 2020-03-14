@@ -233,23 +233,27 @@ def mkImgFn(args, unknownArgs):
   imgDigest = dockerImageBuild(
        ['-f', cfg.dockerFile,
         os.path.dirname(os.path.realpath(cfg.dockerFile))])
+
   # We can rebuild historical images with the --retag arg. Or generate
   # new images with brand new tags without it. Use --retag to recreate
   # the devdocker images corresponding to old commits.
   if args.retag:
     subprocess.check_call(['docker', 'tag', imgDigest, cfg.imageTag])
+    print '\n\nSuccessfully created image: %s' % cfg.imageTag
+    print 'Login to the docker registry and publish image using the'
+    print 'following command: '
+    print '  $ docker push ' + cfg.imageTag
   else:
     newImageVersion = datetime.datetime.now().strftime("%Y-%m-%d") + \
         "-" + imgDigest[7:19]
     newImageTag = '%s/%s:%s' % (
         cfg.registry, cfg.imageName, newImageVersion)
     subprocess.check_call(['docker', 'tag', imgDigest, newImageTag])
-
-  print '\n\nSuccessfully created image: %s' % newImageTag
-  print 'Login to the docker registry and publish image using the'
-  print 'following command: '
-  print '  $ docker push ' + newImageTag
-  print 'Update `imageVersion` in .devdockercfg to ' + newImageVersion
+    print '\n\nSuccessfully created image: %s' % newImageTag
+    print 'Login to the docker registry and publish image using the'
+    print 'following command: '
+    print '  $ docker push ' + newImageTag
+    print 'Update `imageVersion` in .devdockercfg to ' + newImageVersion
 
 def portfwdFn(args, unknownArgs):
   try:
