@@ -30,7 +30,10 @@
 #   config file. Finally, it also prints a set of commands that can be used
 #   to publish this image to the docker registry. We do not include the
 #   publish functionality as part of the devdocker tool itself since that
-#   requires access to docker login credentials etc.
+#   requires access to docker login credentials etc. We can rebuild
+#   historical images with the --retag arg. Or generate new images with
+#   brand new tags without it. Use --retag to recreate the devdocker
+#   images corresponding to old commits.
 #
 # devdocker portfwd
 #   Helps users forward ports from inside docker containers to the host.
@@ -230,11 +233,18 @@ def mkImgFn(args, unknownArgs):
   imgDigest = dockerImageBuild(
        ['-f', cfg.dockerFile,
         os.path.dirname(os.path.realpath(cfg.dockerFile))])
-  newImageVersion =\
-      datetime.datetime.now().strftime("%Y-%m-%d") + "-" + imgDigest[7:19]
-  newImageTag = '%s/%s:%s' % (cfg.registry, cfg.imageName, newImageVersion)
-  subprocess.check_call(
-      ['docker', 'tag', imgDigest, newImageTag])
+  # We can rebuild historical images with the --retag arg. Or generate
+  # new images with brand new tags without it. Use --retag to recreate
+  # the devdocker images corresponding to old commits.
+  if args.retag:
+    subprocess.check_call(['docker', 'tag', imgDigest, cfg.imageTag])
+  else:
+    newImageVersion = datetime.datetime.now().strftime("%Y-%m-%d") + \
+        "-" + imgDigest[7:19]
+    newImageTag = '%s/%s:%s' % (
+        cfg.registry, cfg.imageName, newImageVersion)
+    subprocess.check_call(['docker', 'tag', imgDigest, newImageTag])
+
   print '\n\nSuccessfully created image: %s' % newImageTag
   print 'Login to the docker registry and publish image using the'
   print 'following command: '
@@ -297,6 +307,12 @@ def ArgParser():
       'mkimg',
       description = 'Builds the docker image for the dev container',
       help = 'Builds the docker image for the dev container')
+  mkimgP.add_argument(
+    '--retag', dest = 'retag', action = 'store_true',
+    help = 'If true, the newly built image is tagged with the present' +\
+           'version recorded in .devdockercfg instead of generating a ' +\
+           'new tag')
+  mkimgP.set_defaults(retag= False)
   mkimgP.set_defaults(func = mkImgFn)
 
   portfwdP = subparsers.add_parser(
