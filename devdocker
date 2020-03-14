@@ -230,7 +230,8 @@ def shellFn(args, unknownArgs):
 def mkImgFn(args, unknownArgs):
   cfg = readConfig()
   imgDigest = dockerImageBuild(
-       ['-f', cfg.dockerFile, os.path.dirname(cfg.dockerFile)])
+       ['-f', cfg.dockerFile,
+        os.path.dirname(os.path.realpath(cfg.dockerFile))])
   newImageVersion =\
       datetime.datetime.now().strftime("%Y-%m-%d") + "-" + imgDigest[7:19]
   newImageTag = '%s/%s:%s' % (cfg.registry, cfg.imageName, newImageVersion)
