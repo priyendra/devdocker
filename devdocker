@@ -126,6 +126,10 @@ def dockerImageBuild(args):
 
 def createFn(args, unknownArgs):
   cfg = readConfig()
+  myCfg = {}
+  myCfgFile = findMyCfgFile()
+  if os.path.exists(myCfgFile):
+    myCfg = readDict(myCfgFile)
   homedir = os.path.expanduser('~')
   srcdir = os.getcwd()
   substitutions = {
@@ -151,15 +155,6 @@ USER devdocker
 WORKDIR $SRCDIR
 RUN mkdir -p $SRCDIR
       """)
-      myCfgFile = findMyCfgFile()
-      if os.path.exists(myCfgFile):
-        myCfg = readDict(myCfgFile)
-        for e in myCfg.files:
-          localDockerFile.write(
-            'COPY %s %s\n' % (
-                e['src'] % substitutions,
-                e['dst'] % substitutions
-          ))
     devnull = open(os.devnull, 'w')
     imgDigest = dockerImageBuild(
         ['--build-arg', 'BASE_IMAGE=%s' % cfg.imageTag,
@@ -176,6 +171,9 @@ RUN mkdir -p $SRCDIR
     mountFlags = [ '-v', '%s:%s' % (srcdir, srcdir) ]
     if 'mount' in dir(cfg):
       for m in cfg.mount:
+        mountFlags.extend(['-v', m % substitutions])
+    if 'mount' in dir(myCfg):
+      for m in myCfg.mount:
         mountFlags.extend(['-v', m % substitutions])
     portFlags = []
     if 'ports' in dir(cfg):
