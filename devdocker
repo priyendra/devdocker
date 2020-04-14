@@ -127,6 +127,33 @@ def dockerImageBuild(args):
   return subprocess.check_output(
       ['docker', 'image', 'build', '-q'] + args).strip()
 
+def checkDevdockerVersion(strict, cfg):
+  if not strict:
+    # nothing to do if we do not want strict checking
+    return
+  envVars = subprocess.check_output([
+    'docker', 'inspect', cfg.containerName, '--format',
+    '{{range .Config.Env}}{{printf "%s\\n" .}}{{end}}'
+  ])
+  envVars = envVars.split('\n')
+  foundVersion = False
+  for entry in envVars:
+    if len(entry) == 0:
+      continue
+    parts = entry.split('=')
+    if parts[0] == 'DEVDOCKER_VERSION':
+      foundVersion = True
+      if parts[1] != cfg.imageVersion:
+        sys.stderr.write(
+          'devdocker image version does not match. Please recreate ' +
+          'container via devdocker create.\n')
+        sys.exit(100)
+  if not foundVersion:
+    sys.stderr.write(
+      'Did not find DEVDOCKER_VERSION entry in docker inspect output. ' +
+      'Please recreate container via devdocker create.\n')
+    sys.exit(100)
+
 def createFn(args, unknownArgs):
   cfg = readConfig()
   myCfg = {}
@@ -166,7 +193,8 @@ RUN mkdir -p $SRCDIR
          '--build-arg', 'SRCDIR=%s' % srcdir, tmpdir])
     envFlags = [
       '-e', 'DEVDOCKER_HOST=%s' % socket.gethostbyname(
-          socket.gethostname())
+          socket.gethostname()),
+      '-e', 'DEVDOCKER_VERSION=%s' % cfg.imageVersion,
     ]
     if 'environment' in dir(cfg):
       for var, value in cfg.environment.items():
@@ -203,6 +231,7 @@ RUN mkdir -p $SRCDIR
 
 def execFn(args, unknownArgs):
   cfg = readConfig()
+  checkDevdockerVersion(args.strict, cfg)
   # We setup devdocker containers such that absolute paths outside the
   # container also work inside the container.
   workingDir = os.path.abspath(args.cwd)
@@ -223,6 +252,7 @@ def execFn(args, unknownArgs):
 
 def shellFn(args, unknownArgs):
   cfg = readConfig()
+  checkDevdockerVersion(args.strict, cfg)
   workingDir = os.path.abspath(os.getcwd())
   subprocess.call(
       ['docker', 'exec', '-it', '-w', workingDir,
@@ -294,6 +324,11 @@ def ArgParser():
     help = 'Execute interactive commands like gdb etc.')
   execP.set_defaults(interactive = False)
   execP.add_argument(
+    '--no-strict', dest = 'strict', action = 'store_false',
+    help = 'Disable strict mode where devdocker commands fail if ' +
+           'container version does not match .devdockercfg')
+  execP.set_defaults(strict = True)
+  execP.add_argument(
     '--cwd', dest = 'cwd', action = 'store',
     help = 'Set working directory for provided command.')
   execP.set_defaults(cwd = '.')
@@ -304,6 +339,11 @@ def ArgParser():
       'shell',
       description = 'Start an interactive shell within the dev container',
       help = 'Start an interactive shell within the dev container')
+  shellP.add_argument(
+    '--no-strict', dest = 'strict', action = 'store_false',
+    help = 'Disable strict mode where devdocker commands fail if ' +
+           'container version does not match .devdockercfg')
+  shellP.set_defaults(strict = True)
   shellP.set_defaults(func = shellFn)
 
   # mkimg command
