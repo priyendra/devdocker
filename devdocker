@@ -199,7 +199,7 @@ RUN mkdir -p $SRCDIR
     if 'environment' in dir(cfg):
       for var, value in cfg.environment.items():
         envFlags.extend(['-e', '%s=%s' % (var, value % substitutions)])
-    mountFlags = [ '-v', '%s:%s' % (srcdir, srcdir) ]
+    mountFlags = [ '-v', '%s:%s:delegated' % (srcdir, srcdir) ]
     if 'mount' in dir(cfg):
       for m in cfg.mount:
         mountFlags.extend(['-v', m % substitutions])
