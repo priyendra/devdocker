@@ -214,6 +214,11 @@ RUN mkdir -p $SRCDIR && sudo chown devdocker:devdocker $SRCDIR
       for var, value in cfg.environment.items():
         envFlags.extend(['-e', '%s=%s' % (var, value % substitutions)])
     mountFlags = []
+    # In normal operation, devdocker containers always mount the source
+    # directory. However, large source directory bind mounts on MacOs
+    # suffer from notoriously bad performance. So we support the option
+    # of *not* mounting the source and syncing that into the container
+    # via mutagen, docker-bg-sync etc.
     if not 'mountSrcDir' in dir(cfg) or cfg.mountSrcDir:
       mountFlags = [ '-v', '%s:%s:delegated' % (srcdir, srcdir) ]
     if 'mount' in dir(cfg):
