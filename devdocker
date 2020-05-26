@@ -183,7 +183,7 @@ RUN useradd -u $UID -m -d $HOMEDIR devdocker
 RUN echo "devdocker ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
 USER devdocker
 WORKDIR $SRCDIR
-RUN mkdir -p $SRCDIR
+RUN mkdir -p $SRCDIR && sudo chown devdocker:devdocker $SRCDIR
       """)
     devnull = open(os.devnull, 'w')
     imgDigest = dockerImageBuild(
@@ -196,10 +196,26 @@ RUN mkdir -p $SRCDIR
           socket.gethostname()),
       '-e', 'DEVDOCKER_VERSION=%s' % cfg.imageVersion,
     ]
+    kDevNull = open(os.devnull, 'w')
+    if 'mutagen' in dir(cfg) and cfg.mutagen:
+      subprocess.call(
+          ['mutagen', 'project', 'terminate'],
+          stdout = kDevNull,
+          stderr = kDevNull)
+    if 'volume' in dir(cfg):
+      for volume in cfg.volume:
+        code = subprocess.call(
+            ['docker', 'volume', 'inspect', volume],
+            stdout = kDevNull,
+            stderr = kDevNull)
+        if code != 0:
+          subprocess.check_call(['docker', 'volume', 'create', volume])
     if 'environment' in dir(cfg):
       for var, value in cfg.environment.items():
         envFlags.extend(['-e', '%s=%s' % (var, value % substitutions)])
-    mountFlags = [ '-v', '%s:%s:delegated' % (srcdir, srcdir) ]
+    mountFlags = []
+    if not 'mountSrcDir' in dir(cfg) or cfg.mountSrcDir:
+      mountFlags = [ '-v', '%s:%s:delegated' % (srcdir, srcdir) ]
     if 'mount' in dir(cfg):
       for m in cfg.mount:
         mountFlags.extend(['-v', m % substitutions])
@@ -226,6 +242,8 @@ RUN mkdir -p $SRCDIR
         cmd = map(lambda x: x % substitutions, cmd)
         popenWrapper(
           ['docker', 'exec', cfg.containerName] + cmd)
+    if 'mutagen' in dir(cfg) and cfg.mutagen:
+      subprocess.call(['mutagen', 'project', 'start'])
   finally:
     shutil.rmtree(tmpdir)
 
