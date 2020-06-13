@@ -227,6 +227,9 @@ RUN mkdir -p $SRCDIR && sudo chown devdocker:devdocker $SRCDIR
     if 'mount' in dir(myCfg):
       for m in myCfg.mount:
         mountFlags.extend(['-v', m % substitutions])
+    networkFlags = []
+    if 'network' in dir(cfg):
+      networkFlags = [ '--network', cfg.network ]
     portFlags = []
     if 'ports' in dir(cfg):
       for p in cfg.ports:
@@ -240,6 +243,7 @@ RUN mkdir -p $SRCDIR && sudo chown devdocker:devdocker $SRCDIR
         envFlags +
         mountFlags +
         portFlags +
+        networkFlags +
         ['--name=%s' % cfg.containerName, '--privileged', imgDigest])
     # Run any post-create commands after container creation.
     if 'postCreateCmds' in dir(cfg):
