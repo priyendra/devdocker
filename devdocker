@@ -319,10 +319,15 @@ def portfwdFn(args, unknownArgs):
         'docker', 'inspect', cfg.containerName, '--format',
         '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}'])
     hostPort = args.containerPort if args.hostPort == 0 else args.hostPort
-    subprocess.check_call([
-        'docker', 'run', '--rm', '-p', '%d:1234' % hostPort, 'verb/socat',
-        'TCP-LISTEN:1234,fork',
-        'TCP-CONNECT:%s:%d' % (ip, args.containerPort)])
+    networkFlags = []
+    if 'network' in dir(cfg):
+      networkFlags = [ '--network', cfg.network ]
+    subprocess.check_call(
+        ['docker', 'run', '--rm', '-p', '%d:1234' % hostPort] +
+        networkFlags +
+        ['verb/socat'] +
+        ['TCP-LISTEN:1234,fork',
+         'TCP-CONNECT:%s:%d' % (ip, args.containerPort)])
   except KeyboardInterrupt:
     pass
 
