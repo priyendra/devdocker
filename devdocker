@@ -90,6 +90,27 @@ def findCfgFile():
 def findMyCfgFile():
   return os.path.join(os.path.dirname(findCfgFile()), kMyCfgFileName)
 
+# This function is provided so that it can be used in .devdockercfg files
+# as a way to merge dictionaries. Our merge semantics are as follows:
+# - a is considered the baseline dictionary into which b is merged
+# - any key in b that is not present in a is added verbatim
+# - keys that are present in both a and b are merged as follows:
+#   - if both keys are scalars, the value in b supersedes the value in a
+#   - if both keys are lists, the value in b is appended to the value in a
+#   - if the types do not match, an error is raised
+def mergeDict(a, b):
+  for k in b.keys():
+    if not k in a:
+      a[k] = b[k]
+    else:
+      if type(a[k]) is list and type(b[k]) is list:
+        a[k] = a[k] + b[k]
+      elif not type(a[k]) is list and not type(b[k]) is list:
+        a[k] = b[k]
+      else:
+        raise Exception('Mismatching type for key: %s' % k)
+  return a
+
 def readDict(fileName):
   class Object:
     pass
