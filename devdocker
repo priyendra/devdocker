@@ -175,6 +175,11 @@ def checkDevdockerVersion(strict, cfg):
       'Please recreate container via devdocker create.\n')
     sys.exit(100)
 
+def maybeCreateDir(path):
+  path = path.split(':')[0]
+  if path[0] == '/' and not os.path.exists(path):
+    os.makedirs(path)
+
 def createFn(args, unknownArgs):
   cfg = readConfig()
   myCfg = {}
@@ -244,9 +249,11 @@ RUN mkdir -p $SRCDIR && sudo chown devdocker:devdocker $SRCDIR
       mountFlags = [ '-v', '%s:%s:delegated' % (srcdir, srcdir) ]
     if 'mount' in dir(cfg):
       for m in cfg.mount:
+        maybeCreateDir(m % substitutions)
         mountFlags.extend(['-v', m % substitutions])
     if 'mount' in dir(myCfg):
       for m in myCfg.mount:
+        maybeCreateDir(m % substitutions)
         mountFlags.extend(['-v', m % substitutions])
     networkFlags = []
     if 'network' in dir(cfg):
