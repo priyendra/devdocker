@@ -236,6 +236,13 @@ RUN mkdir -p $SRCDIR && sudo chown devdocker:devdocker $SRCDIR
             stderr = kDevNull)
         if code != 0:
           subprocess.check_call(['docker', 'volume', 'create', volume])
+    if 'network' in dir(cfg):
+      code = subprocess.call(
+          ['docker', 'network', 'inspect', cfg.network],
+          stdout = kDevNull,
+          stderr = kDevNull)
+      if code != 0:
+        subprocess.check_call(['docker', 'network', 'create', cfg.network])
     if 'environment' in dir(cfg):
       for var, value in cfg.environment.items():
         envFlags.extend(['-e', '%s=%s' % (var, value % substitutions)])
