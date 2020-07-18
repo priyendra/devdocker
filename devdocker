@@ -305,6 +305,10 @@ def execFn(args, unknownArgs):
     sys.exit(popenWrapper(
         ['docker', 'exec', '-it', '-w', workingDir, cfg.containerName] + \
         ['bash', '-c', 'sleep 0.05 && %s' % joinedArgs]))
+  elif args.tty:
+    sys.exit(popenWrapper(
+        ['docker', 'exec', '-t', '-w', workingDir, cfg.containerName] + \
+        unknownArgs))
   else:
     cmd = ['docker', 'exec', '-w', workingDir]
     if not sys.stdin.isatty():
@@ -389,6 +393,12 @@ def ArgParser():
   execP.add_argument(
     '-i', '--interactive', dest = 'interactive', action = 'store_true',
     help = 'Execute interactive commands like gdb etc.')
+  execP.add_argument(
+    '-t', '--tty', dest = 'tty', action = 'store_true',
+    help = 'Allocates a pseudo-TTY for process inside container. This ' +
+           'keeps the launched process alive and allows callers to ' +
+           'interact with the process without attaching stdin stream. ' +
+           'Useful for attaching debugger to tests launched from scripts.')
   execP.set_defaults(interactive = False)
   execP.add_argument(
     '--no-strict', dest = 'strict', action = 'store_false',
