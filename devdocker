@@ -284,8 +284,13 @@ RUN mkdir -p $SRCDIR && sudo chown devdocker:devdocker $SRCDIR
     if 'postCreateCmds' in dir(cfg):
       for cmd in cfg.postCreateCmds:
         cmd = map(lambda x: x % substitutions, cmd)
-        popenWrapper(
+        exitCode = popenWrapper(
           ['docker', 'exec', cfg.containerName] + cmd)
+        if exitCode != 0:
+          raise Exception(
+              "Post-create command %s failed with exit code [%d]" % (
+              cmd,
+              exitCode))
     if 'mutagen' in dir(cfg) and cfg.mutagen:
       subprocess.call(['mutagen', 'project', 'start'])
   finally:
