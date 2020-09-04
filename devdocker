@@ -113,18 +113,25 @@ def mergeDict(*dicts):
           raise Exception('Mismatching type for key: %s' % k)
   return result
 
-def readDict(fileName):
+def readDict(fileName, substitutions):
   class Object:
     pass
   obj = Object()
   with open(fileName) as f:
-    obj.__dict__.update(eval(f.read()))
+    obj.__dict__.update(eval(f.read() % substitutions))
   return obj
 
 def readConfig():
-  cfg = readDict(findCfgFile())
+  cfgFile = findCfgFile()
+  substitutions = {
+    'SRCDIR': os.path.dirname(cfgFile),
+    'HOMEDIR': os.path.expanduser('~'),
+  }
+  cfg = readDict(cfgFile, substitutions)
   cfg.imageTag = '%s/%s:%s' % (
       cfg.registry, cfg.imageName, cfg.imageVersion)
+  cfg.srcDir = substitutions['SRCDIR']
+  cfg.homeDir = substitutions['HOMEDIR']
   return cfg
 
 # A simple wrapper around subprocess.Popen with proper handling for Ctrl-C.
@@ -187,13 +194,10 @@ def createFn(args, unknownArgs):
   myCfg = {}
   myCfgFile = findMyCfgFile()
   if os.path.exists(myCfgFile):
-    myCfg = readDict(myCfgFile)
-  homedir = os.path.expanduser('~')
-  srcdir = os.getcwd()
-  substitutions = {
-    'SRCDIR': srcdir,
-    'HOMEDIR': homedir,
-  }
+    myCfg = readDict(myCfgFile, {
+      'SRCDIR': cfg.srcDir,
+      'HOMEDIR': cfg.homeDir,
+    })
   tmpdir = "/tmp/devdocker.local"
   shutil.rmtree(tmpdir, ignore_errors=True)
   os.mkdir(tmpdir, 0o755)
@@ -217,8 +221,8 @@ RUN mkdir -p $SRCDIR && sudo chown devdocker:devdocker $SRCDIR
     imgDigest = dockerImageBuild(
         ['--build-arg', 'BASE_IMAGE=%s' % cfg.imageTag,
          '--build-arg', 'UID=%d' % os.getuid(),
-         '--build-arg', 'HOMEDIR=%s' % homedir,
-         '--build-arg', 'SRCDIR=%s' % srcdir, tmpdir])
+         '--build-arg', 'HOMEDIR=%s' % cfg.homeDir,
+         '--build-arg', 'SRCDIR=%s' % cfg.srcDir, tmpdir])
     envFlags = [
       '-e', 'DEVDOCKER_HOST=%s' % socket.gethostbyname(
           socket.gethostname()),
@@ -247,7 +251,7 @@ RUN mkdir -p $SRCDIR && sudo chown devdocker:devdocker $SRCDIR
         subprocess.check_call(['docker', 'network', 'create', cfg.network])
     if 'environment' in dir(cfg):
       for var, value in cfg.environment.items():
-        envFlags.extend(['-e', '%s=%s' % (var, value % substitutions)])
+        envFlags.extend(['-e', '%s=%s' % (var, value)])
     mountFlags = []
     # In normal operation, devdocker containers always mount the source
     # directory. However, large source directory bind mounts on MacOs
@@ -255,15 +259,15 @@ RUN mkdir -p $SRCDIR && sudo chown devdocker:devdocker $SRCDIR
     # of *not* mounting the source and syncing that into the container
     # via mutagen, docker-bg-sync etc.
     if not 'mountSrcDir' in dir(cfg) or cfg.mountSrcDir:
-      mountFlags = [ '-v', '%s:%s:delegated' % (srcdir, srcdir) ]
+      mountFlags = [ '-v', '%s:%s:delegated' % (cfg.srcDir, cfg.srcDir) ]
     if 'mount' in dir(cfg):
       for m in cfg.mount:
-        maybeCreateDir(m % substitutions)
-        mountFlags.extend(['-v', m % substitutions])
+        maybeCreateDir(m)
+        mountFlags.extend(['-v', m])
     if 'mount' in dir(myCfg):
       for m in myCfg.mount:
-        maybeCreateDir(m % substitutions)
-        mountFlags.extend(['-v', m % substitutions])
+        maybeCreateDir(m)
+        mountFlags.extend(['-v', m])
     networkFlags = []
     if 'network' in dir(cfg):
       networkFlags = [ '--network', cfg.network ]
@@ -285,7 +289,7 @@ RUN mkdir -p $SRCDIR && sudo chown devdocker:devdocker $SRCDIR
     # Run any post-create commands after container creation.
     if 'postCreateCmds' in dir(cfg):
       for cmd in cfg.postCreateCmds:
-        cmd = map(lambda x: x % substitutions, cmd)
+        cmd = map(lambda x: x, cmd)
         exitCode = popenWrapper(
           ['docker', 'exec', cfg.containerName] + cmd)
         if exitCode != 0:
