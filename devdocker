@@ -189,6 +189,13 @@ def maybeCreateDir(path):
   if path[0] == '/' and not os.path.exists(path):
     os.makedirs(path)
 
+def getSelfIpAddres():
+  s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+  s.connect(('10.255.255.255', 1)) # ip does not have to be reachable
+  ip = s.getsockname()[0]
+  s.close()
+  return ip
+
 def createFn(args, unknownArgs):
   cfg = readConfig()
   myCfg = {}
@@ -224,8 +231,7 @@ RUN mkdir -p $SRCDIR && sudo chown devdocker:devdocker $SRCDIR
          '--build-arg', 'HOMEDIR=%s' % cfg.homeDir,
          '--build-arg', 'SRCDIR=%s' % cfg.srcDir, tmpdir])
     envFlags = [
-      '-e', 'DEVDOCKER_HOST=%s' % socket.gethostbyname(
-          socket.gethostname()),
+      '-e', 'DEVDOCKER_HOST=%s' % getSelfIpAddres(),
       '-e', 'DEVDOCKER_VERSION=%s' % cfg.imageVersion,
     ]
     kDevNull = open(os.devnull, 'w')
