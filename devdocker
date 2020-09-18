@@ -281,9 +281,14 @@ RUN mkdir -p $SRCDIR && sudo chown devdocker:devdocker $SRCDIR
     if 'ports' in dir(cfg):
       for p in cfg.ports:
         portFlags.extend(['-p', p])
-    # Delete any existing container with the provided containerName
+    # Delete any existing container with the provided containerName. We
+    # first kill the container because we have observed that `docker rm -f`
+    # can sometimes take a long time to execute.
     subprocess.call(
-        ['docker', 'rm', '-f', cfg.containerName],
+        ['docker', 'kill', cfg.containerName],
+        stdout = devnull, stderr = devnull)
+    subprocess.call(
+        ['docker', 'rm', cfg.containerName],
         stdout = devnull, stderr = devnull)
     subprocess.check_call(
         ['docker', 'run', '-d', '-i', '-t' ] +
