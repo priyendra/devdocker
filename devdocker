@@ -165,7 +165,7 @@ def checkDevdockerVersion(strict, cfg):
     'docker', 'inspect', cfg.containerName, '--format',
     '{{range .Config.Env}}{{printf "%s\\n" .}}{{end}}'
   ])
-  envVars = envVars.split('\n')
+  envVars = envVars.decode().split('\n')
   foundVersion = False
   for entry in envVars:
     if len(entry) == 0:
