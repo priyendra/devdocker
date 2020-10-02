@@ -1,4 +1,4 @@
-#! /usr/bin/python
+#! /usr/bin/python3
 
 # @devdocker is a utility meant to "manage" a docker container that
 # encapsulates the build environment for a project. In addition, it can be
@@ -101,7 +101,7 @@ def findMyCfgFile():
 def mergeDict(*dicts):
   result = {}
   for d in dicts:
-    for k in d.keys():
+    for k in list(d.keys()):
       if not k in result:
         result[k] = d[k]
       else:
@@ -141,8 +141,8 @@ def popenWrapper(argv):
     pid = subprocess.Popen(argv)
     pid.wait()
   except KeyboardInterrupt:
-    print "WARNING: Ctrl-C does not kill the underlying process. The \n" +\
-          "process is (most likely) still running inside the container"
+    print("WARNING: Ctrl-C does not kill the underlying process. The \n" +\
+          "process is (most likely) still running inside the container")
     pid.kill()
   return pid.returncode
 
@@ -236,7 +236,7 @@ RUN mkdir -p $SRCDIR && sudo chown devdocker:devdocker $SRCDIR
     ]
     kDevNull = open(os.devnull, 'w')
     if 'mutagen' in dir(cfg) and cfg.mutagen:
-      print 'Terminating mutagen project ...'
+      print('Terminating mutagen project ...')
       subprocess.call(
           ['mutagen', 'project', 'terminate'],
           stdout = kDevNull,
@@ -257,7 +257,7 @@ RUN mkdir -p $SRCDIR && sudo chown devdocker:devdocker $SRCDIR
       if code != 0:
         subprocess.check_call(['docker', 'network', 'create', cfg.network])
     if 'environment' in dir(cfg):
-      for var, value in cfg.environment.items():
+      for var, value in list(cfg.environment.items()):
         envFlags.extend(['-e', '%s=%s' % (var, value)])
     mountFlags = []
     # In normal operation, devdocker containers always mount the source
@@ -301,7 +301,7 @@ RUN mkdir -p $SRCDIR && sudo chown devdocker:devdocker $SRCDIR
     # Run any post-create commands after container creation.
     if 'postCreateCmds' in dir(cfg):
       for cmd in cfg.postCreateCmds:
-        cmd = map(lambda x: x, cmd)
+        cmd = [x for x in cmd]
         exitCode = popenWrapper(
           ['docker', 'exec', cfg.containerName] + cmd)
         if exitCode != 0:
@@ -324,7 +324,7 @@ def execFn(args, unknownArgs):
     # We inject a super-hacky sleep statement because for some weird
     # reason the terminal behavior (number of columns etc) are properly
     # setup in the presence of that sleep statement.
-    joinedArgs = ' '.join(map(lambda x : pipes.quote(x), unknownArgs))
+    joinedArgs = ' '.join([pipes.quote(x) for x in unknownArgs])
     sys.exit(popenWrapper(
         ['docker', 'exec', '-it', '-w', workingDir, cfg.containerName] + \
         ['bash', '-c', 'sleep 0.05 && %s' % joinedArgs]))
@@ -358,21 +358,21 @@ def mkImgFn(args, unknownArgs):
   # the devdocker images corresponding to old commits.
   if args.retag:
     subprocess.check_call(['docker', 'tag', imgDigest, cfg.imageTag])
-    print '\n\nSuccessfully created image: %s' % cfg.imageTag
-    print 'Login to the docker registry and publish image using the'
-    print 'following command: '
-    print '  $ docker push ' + cfg.imageTag
+    print('\n\nSuccessfully created image: %s' % cfg.imageTag)
+    print('Login to the docker registry and publish image using the')
+    print('following command: ')
+    print('  $ docker push ' + cfg.imageTag)
   else:
     newImageVersion = datetime.datetime.now().strftime("%Y-%m-%d") + \
         "-" + imgDigest[7:19]
     newImageTag = '%s/%s:%s' % (
         cfg.registry, cfg.imageName, newImageVersion)
     subprocess.check_call(['docker', 'tag', imgDigest, newImageTag])
-    print '\n\nSuccessfully created image: %s' % newImageTag
-    print 'Login to the docker registry and publish image using the'
-    print 'following command: '
-    print '  $ docker push ' + newImageTag
-    print 'Update `imageVersion` in .devdockercfg to ' + newImageVersion
+    print('\n\nSuccessfully created image: %s' % newImageTag)
+    print('Login to the docker registry and publish image using the')
+    print('following command: ')
+    print('  $ docker push ' + newImageTag)
+    print('Update `imageVersion` in .devdockercfg to ' + newImageVersion)
 
 def portfwdFn(args, unknownArgs):
   try:
