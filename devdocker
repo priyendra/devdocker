@@ -236,7 +236,8 @@ RUN mkdir -p $SRCDIR && sudo chown devdocker:devdocker $SRCDIR
     ]
     kDevNull = open(os.devnull, 'w')
     if 'mutagen' in dir(cfg) and cfg.mutagen:
-      print('Terminating mutagen project ...')
+      print('Terminating mutagen project. If this hangs, run ' +
+            '`pkill mutagen` and retry `devdocker create`.')
       subprocess.call(
           ['mutagen', 'project', 'terminate'],
           stdout = kDevNull,
@@ -297,11 +298,11 @@ RUN mkdir -p $SRCDIR && sudo chown devdocker:devdocker $SRCDIR
         mountFlags +
         portFlags +
         networkFlags +
+        cfg.extraFlags +
         ['--name=%s' % cfg.containerName, '--privileged', imgDigest])
     # Run any post-create commands after container creation.
     if 'postCreateCmds' in dir(cfg):
       for cmd in cfg.postCreateCmds:
-        cmd = [x for x in cmd]
         exitCode = popenWrapper(
           ['docker', 'exec', cfg.containerName] + cmd)
         if exitCode != 0:
