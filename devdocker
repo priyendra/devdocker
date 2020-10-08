@@ -155,7 +155,7 @@ def dockerImageBuild(args):
   # in the first command and we are able to easily read the imgDigest
   # from the second command.
   return subprocess.check_output(
-      ['docker', 'image', 'build', '-q'] + args).strip()
+      ['docker', 'image', 'build', '-q'] + args).strip().decode()
 
 def checkDevdockerVersion(strict, cfg):
   if not strict:
@@ -380,7 +380,8 @@ def portfwdFn(args, unknownArgs):
     cfg = readConfig()
     ip = subprocess.check_output([
         'docker', 'inspect', cfg.containerName, '--format',
-        '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}'])
+        '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}'
+    ]).decode()
     hostPort = args.containerPort if args.hostPort == 0 else args.hostPort
     networkFlags = []
     if 'network' in dir(cfg):
