@@ -72,23 +72,25 @@ import sys
 import tempfile
 import time
 
-kCfgFileName = '.devdockercfg'
+kDefaultCfgFileName = '.devdockercfg'
 kMyCfgFileName = '.mydevdockercfg'
 
 class MissingConfigFileError(Exception):
-  def __init__(self):
+  def __init__(self, cfgFileName):
+    self.cfgFileName = cfgFileName
     pass
 
-def findCfgFile():
+def findCfgFile(cfgFileName):
   currDir = os.path.abspath(os.getcwd())
-  while not os.path.exists(os.path.join(currDir, kCfgFileName)):
+  while not os.path.exists(os.path.join(currDir, cfgFileName)):
     if currDir == '/':
-      raise MissingConfigFileError()
+      raise MissingConfigFileError(cfgFileName)
     currDir = os.path.dirname(currDir)
-  return os.path.join(currDir, kCfgFileName)
+  return os.path.join(currDir, cfgFileName)
 
-def findMyCfgFile():
-  return os.path.join(os.path.dirname(findCfgFile()), kMyCfgFileName)
+def findMyCfgFile(cfgFileName):
+  return os.path.join(os.path.dirname(
+    findCfgFile(cfgFileName)), kMyCfgFileName)
 
 # This function is provided so that it can be used in .devdockercfg files
 # as a way to merge dictionaries. Our merge semantics are as follows:
@@ -118,11 +120,27 @@ def readDict(fileName, substitutions):
     pass
   obj = Object()
   with open(fileName) as f:
-    obj.__dict__.update(eval(f.read() % substitutions))
+    # We double substitute to allow config files to include other config
+    # files. E.g. consider the following config file:
+    # mergeDict(
+    #   eval(open('%(SRCDIR)s/.devdockercfg-json').read()),
+    #   eval(open('%(SRCDIR)s/.devdockercfg-common').read()),
+    #   {
+    #     'extraFlags': [ ... ],
+    #     'mount': [ ... ],
+    #   }
+    # )
+    # In this case, if we only resolve the first level file, we will not
+    # be able to apply substitutions to the text in .devdockercfg-json etc.
+    # With the following scheme will work for up to two levels includes.
+    # That is, .devdockercfg-json should not include another file otherwise
+    # the open(...) call itself will fail.
+    cfgFileText = str(eval(f.read() % substitutions)) % substitutions
+    obj.__dict__.update(eval(cfgFileText))
   return obj
 
-def readConfig():
-  cfgFile = findCfgFile()
+def readConfig(cfgFileName):
+  cfgFile = findCfgFile(cfgFileName)
   substitutions = {
     'SRCDIR': os.path.dirname(cfgFile),
     'HOMEDIR': os.path.expanduser('~'),
@@ -197,9 +215,9 @@ def getSelfIpAddres():
   return ip
 
 def createFn(args, unknownArgs):
-  cfg = readConfig()
+  cfg = readConfig(args.cfgFileName)
   myCfg = {}
-  myCfgFile = findMyCfgFile()
+  myCfgFile = findMyCfgFile(args.cfgFileName)
   if os.path.exists(myCfgFile):
     myCfg = readDict(myCfgFile, {
       'SRCDIR': cfg.srcDir,
@@ -316,7 +334,7 @@ RUN mkdir -p $SRCDIR && sudo chown devdocker:devdocker $SRCDIR
     shutil.rmtree(tmpdir)
 
 def execFn(args, unknownArgs):
-  cfg = readConfig()
+  cfg = readConfig(args.cfgFileName)
   checkDevdockerVersion(args.strict, cfg)
   # We setup devdocker containers such that absolute paths outside the
   # container also work inside the container.
@@ -341,7 +359,7 @@ def execFn(args, unknownArgs):
     sys.exit(popenWrapper(cmd))
 
 def shellFn(args, unknownArgs):
-  cfg = readConfig()
+  cfg = readConfig(args.cfgFileName)
   checkDevdockerVersion(args.strict, cfg)
   workingDir = os.path.abspath(os.getcwd())
   subprocess.call(
@@ -349,7 +367,7 @@ def shellFn(args, unknownArgs):
        cfg.containerName, '/bin/bash'])
 
 def mkImgFn(args, unknownArgs):
-  cfg = readConfig()
+  cfg = readConfig(args.cfgFileName)
   imgDigest = dockerImageBuild(
        ['-f', cfg.dockerFile,
         os.path.dirname(os.path.realpath(cfg.dockerFile))])
@@ -377,7 +395,7 @@ def mkImgFn(args, unknownArgs):
 
 def portfwdFn(args, unknownArgs):
   try:
-    cfg = readConfig()
+    cfg = readConfig(args.cfgFileName)
     ip = subprocess.check_output([
         'docker', 'inspect', cfg.containerName, '--format',
         '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}'
@@ -399,6 +417,11 @@ def ArgParser():
   parser = argparse.ArgumentParser(
     prog = 'devdocker',
     description = 'Utility for creating/managing the dev container')
+  parser.add_argument(
+    '--cfg', dest = 'cfgFileName', default = kDefaultCfgFileName,
+    required = False,
+    help = 'Name of devdocker config file. \'%s\' by default' \
+        % kDefaultCfgFileName)
   subparsers = parser.add_subparsers(
     title = 'subcommands',
     help = 'execute commands with -h for further help')
@@ -503,6 +526,8 @@ def main(argv):
 if __name__ == '__main__':
   try:
     main(sys.argv[1:])
-  except MissingConfigFileError:
-    sys.stderr.write('.devdockercfg not found in any parent directory\n')
+  except MissingConfigFileError as e:
+    sys.stderr.write(
+        'devdocker config \'%s\' not found in any parent directory\n' %
+        e.cfgFileName)
     sys.exit(1)
