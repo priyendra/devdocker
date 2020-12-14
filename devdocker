@@ -301,6 +301,9 @@ RUN mkdir -p $SRCDIR && sudo chown devdocker:devdocker $SRCDIR
     if 'ports' in dir(cfg):
       for p in cfg.ports:
         portFlags.extend(['-p', p])
+    extraFlags = []
+    if 'extraFlags' in dir(cfg):
+      extraFlags = cfg.extraFlags
     # Delete any existing container with the provided containerName. We
     # first kill the container because we have observed that `docker rm -f`
     # can sometimes take a long time to execute.
@@ -316,7 +319,7 @@ RUN mkdir -p $SRCDIR && sudo chown devdocker:devdocker $SRCDIR
         mountFlags +
         portFlags +
         networkFlags +
-        cfg.extraFlags +
+        extraFlags +
         ['--name=%s' % cfg.containerName, '--privileged', imgDigest])
     # Run any post-create commands after container creation.
     if 'postCreateCmds' in dir(cfg):
