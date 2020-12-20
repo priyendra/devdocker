@@ -253,6 +253,15 @@ RUN mkdir -p $SRCDIR && sudo chown devdocker:devdocker $SRCDIR
       '-e', 'DEVDOCKER_VERSION=%s' % cfg.imageVersion,
     ]
     kDevNull = open(os.devnull, 'w')
+    # Delete any existing container with the provided containerName. We
+    # first kill the container because we have observed that `docker rm -f`
+    # can sometimes take a long time to execute.
+    subprocess.call(
+        ['docker', 'kill', cfg.containerName],
+        stdout = devnull, stderr = devnull)
+    subprocess.call(
+        ['docker', 'rm', cfg.containerName],
+        stdout = devnull, stderr = devnull)
     if 'mutagen' in dir(cfg) and cfg.mutagen:
       print('Terminating mutagen project. If this hangs, run ' +
             '`pkill mutagen` and retry `devdocker create`.')
@@ -304,15 +313,6 @@ RUN mkdir -p $SRCDIR && sudo chown devdocker:devdocker $SRCDIR
     extraFlags = []
     if 'extraFlags' in dir(cfg):
       extraFlags = cfg.extraFlags
-    # Delete any existing container with the provided containerName. We
-    # first kill the container because we have observed that `docker rm -f`
-    # can sometimes take a long time to execute.
-    subprocess.call(
-        ['docker', 'kill', cfg.containerName],
-        stdout = devnull, stderr = devnull)
-    subprocess.call(
-        ['docker', 'rm', cfg.containerName],
-        stdout = devnull, stderr = devnull)
     subprocess.check_call(
         ['docker', 'run', '-d', '-i', '-t' ] +
         envFlags +
