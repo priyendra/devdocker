@@ -165,15 +165,20 @@ def popenWrapper(argv):
   return pid.returncode
 
 def dockerImageBuild(args):
-  subprocess.check_call(['docker', 'image', 'build'] + args)
+  # There seems to be an inexplicable failure in devdocker that we need
+  # to fix via the following hack.
+  myEnv = os.environ
+  myEnv['DOCKER_BUILDKIT'] = '0'
+  subprocess.check_call(['docker', 'image', 'build'] + args, env = myEnv)
   # We now execute the same command again to get the imgDigest by
   # adding '-q' to the args. Since it is the same command, this
   # executes quite quickly because of the docker cache. This "scheme"
   # gives us best of both worlds as users get the progress updates
   # in the first command and we are able to easily read the imgDigest
   # from the second command.
-  return subprocess.check_output(
-      ['docker', 'image', 'build', '-q'] + args).strip().decode()
+  result = subprocess.check_output(
+      ['docker', 'image', 'build', '-q'] + args, env = myEnv)
+  return result.strip().decode()
 
 def checkDevdockerVersion(strict, cfg):
   if not strict:
