@@ -248,6 +248,10 @@ WORKDIR $SRCDIR
 RUN mkdir -p $SRCDIR && sudo chown devdocker:devdocker $SRCDIR
       """)
     devnull = open(os.devnull, 'w')
+    # There is a bug in github packages which requires that the image must
+    # be manually pulled before the build below will succeed. This hack
+    # should hopefully go away once we migrate to ghcr.io.
+    subprocess.call(['docker', 'pull', cfg.imageTag])
     imgDigest = dockerImageBuild(
         ['--build-arg', 'BASE_IMAGE=%s' % cfg.imageTag,
          '--build-arg', 'UID=%d' % os.getuid(),
