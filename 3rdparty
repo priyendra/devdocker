@@ -1,0 +1,125 @@
+#! /usr/bin/python
+
+import argparse
+import os
+import shutil
+import stat
+import subprocess
+import sys
+
+def readDict(fileName):
+  class Object:
+    pass
+  obj = Object()
+  with open(fileName) as f:
+    obj.__dict__.update(eval(f.read()))
+  return obj
+
+def readLibConfig(root, library):
+  return readDict(os.path.join(root, "%s/config" % library))
+
+def libSrcDir(root, library):
+  return os.path.join(root, "%s/src-gitignore" % library)
+
+def fetch(args, unknownArgs):
+  cfg = readLibConfig(args.root, args.library)
+  src = libSrcDir(args.root, cfg.name)
+  # Fetch the source code for the library
+  shutil.rmtree(src, ignore_errors = True)
+  if hasattr(cfg, 'custom'):
+    os.makedirs(src)
+    subprocess.check_call([cfg.custom], cwd = src, shell = True)
+  elif hasattr(cfg, 'git'):
+    subprocess.check_call(['git', 'clone', cfg.git, src])
+    subprocess.check_call(['git', 'checkout', cfg.commit], cwd = src)
+  elif hasattr(cfg, 'tgz'):
+    os.makedirs(src)
+    tgz = '/tmp/' + cfg.name + '.tar.gz'
+    subprocess.check_call(
+      ['curl', '-L', '--http1.1', '-o', tgz, cfg.tgz])
+    subprocess.check_call(['tar', 'zxf', tgz], cwd = src)
+    os.remove(tgz)
+  elif hasattr(cfg, 'tbz'):
+    os.makedirs(src)
+    tbz = '/tmp/' + cfg.name + '.tar.bz2'
+    subprocess.check_call(
+      ['curl', '-L', '--http1.1', '-o', tbz, cfg.tbz])
+    subprocess.check_call(['tar', 'jxf', tbz], cwd = src)
+    os.remove(tbz)
+  else:
+    raise 'Unsupported source in cfg: %s' % (cfg.name)
+
+def install(args, unknownArgs):
+  cfg = readLibConfig(args.root, args.library)
+  if args.fetch:
+    fetch(args, unknownArgs)
+  env = os.environ.copy()
+  # Define other environment variables (CFLAGS etc)
+  env['EXTERNAL_LIB'] = cfg.name
+  env['PARALLELISM'] = '10'
+  tmpScriptFileName = "/tmp/3rdparty"
+  with open(tmpScriptFileName, 'w') as tmpScript:
+    tmpScript.write("""
+#! /bin/bash
+
+set -eEo pipefail
+
+source ../3rdparty_install.sh
+    """)
+  subprocess.check_call(
+    ['/bin/bash', tmpScriptFileName],
+    env=env,
+    cwd=libSrcDir(args.root, cfg.name))
+  if args.cleanup:
+    src = libSrcDir(args.root, cfg.name)
+    shutil.rmtree(src, ignore_errors = True)
+    os.remove(tmpScriptFileName)
+
+def argParser():
+  parser = argparse.ArgumentParser(
+    prog = '3rdparty',
+    description = 'Utility for fetching and installing 3rdparty libraries')
+  parser.add_argument(
+    '--root', dest = 'root', action = 'store',
+    help = 'Path to root directory for 3rdparty configs')
+  parser.set_defaults(root = 'devdocker/3rdparty/')
+
+  subparsers = parser.add_subparsers(
+    title = 'subcommands',
+    help = 'execute commands with -h for further help')
+
+  # fetch command
+  fetchP = subparsers.add_parser(
+    'fetch',
+    description = 'Fetches the source of the given 3rdparty library',
+    help = 'Fetches the source of the given 3rdparty library')
+  fetchP.add_argument(
+    'library', help = 'The name of the library')
+  fetchP.set_defaults(func = fetch)
+
+  # install command
+  installP = subparsers.add_parser(
+    'install',
+    description = 'Installs the 3rdparty library',
+    help = 'Installs the 3rdparty library')
+  installP.add_argument(
+    'library', help = 'The name of the library')
+  installP.add_argument(
+    '--no-fetch', dest = 'fetch', action = 'store_false',
+    help = 'Do not fetch the asset source')
+  installP.set_defaults(fetch = True)
+  installP.add_argument(
+    '--no-cleanup', dest = 'cleanup', action = 'store_false',
+    help = 'Do not cleanup the asset source tree after installation')
+  installP.set_defaults(cleanup = True)
+  installP.set_defaults(func = install)
+
+  return parser
+
+def main(argv):
+  parser = argParser()
+  args, unknownArgs = parser.parse_known_args()
+  args.func(args, unknownArgs)
+
+if __name__ == '__main__':
+  main(sys.argv)
