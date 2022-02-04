@@ -56,9 +56,6 @@
 #     container.
 #   - postCreateCmds: Each command in this list is executed inside the
 #     container after its creation.
-#
-# Paths in .devdockercfg can refer to users home directory and source
-# directory of a project using %(HOMEDIR)s and %(SRCDIR)s respectively.
 
 import argparse
 import datetime
@@ -115,41 +112,31 @@ def mergeDict(*dicts):
           raise Exception('Mismatching type for key: %s' % k)
   return result
 
-def readDict(fileName, substitutions):
+def readDict(fileName):
   class Object:
     pass
   obj = Object()
   with open(fileName) as f:
-    # We double substitute to allow config files to include other config
-    # files. E.g. consider the following config file:
-    # mergeDict(
-    #   eval(open('%(SRCDIR)s/.devdockercfg-json').read()),
-    #   eval(open('%(SRCDIR)s/.devdockercfg-common').read()),
-    #   {
-    #     'extraFlags': [ ... ],
-    #     'mount': [ ... ],
-    #   }
-    # )
-    # In this case, if we only resolve the first level file, we will not
-    # be able to apply substitutions to the text in .devdockercfg-json etc.
-    # With the following scheme will work for up to two levels includes.
-    # That is, .devdockercfg-json should not include another file otherwise
-    # the open(...) call itself will fail.
-    cfgFileText = str(eval(f.read() % substitutions)) % substitutions
-    obj.__dict__.update(eval(cfgFileText))
+    # We temporarily change the working directory to the directory in which
+    # the config file is located. This is necessary for the eval(...) call
+    # below to work correct. Config files are sometimes broken across
+    # multiple files for modularity / cross-platform customization. These
+    # files are then imported and merged into a single config file using
+    # python open(`path/to/imported/configfile').read(). This chdir trick
+    # ensures that the relative path path/to/imported/configfile works
+    # correctly.
+    currDir = os.getcwd()
+    os.chdir(os.path.dirname(fileName))
+    obj.__dict__.update(eval(f.read()))
+    os.chdir(currDir)
   return obj
 
 def readConfig(cfgFileName):
   cfgFile = findCfgFile(cfgFileName)
-  substitutions = {
-    'SRCDIR': os.path.dirname(cfgFile),
-    'HOMEDIR': os.path.expanduser('~'),
-  }
-  cfg = readDict(cfgFile, substitutions)
+  cfg = readDict(cfgFile)
   cfg.imageTag = '%s/%s:%s' % (
       cfg.registry, cfg.imageName, cfg.imageVersion)
-  cfg.srcDir = substitutions['SRCDIR']
-  cfg.homeDir = substitutions['HOMEDIR']
+  cfg.rootDir = os.path.dirname(cfgFile)
   return cfg
 
 # A simple wrapper around subprocess.Popen with proper handling for Ctrl-C.
@@ -174,7 +161,7 @@ def dockerImageBuild(args):
   # adding '-q' to the args. Since it is the same command, this
   # executes quite quickly because of the docker cache. This "scheme"
   # gives us best of both worlds as users get the progress updates
-  # in the first command and we are able to easily read the imgDigest
+  # in the first command and we are able to easily parse out the imgDigest
   # from the second command.
   result = subprocess.check_output(
       ['docker', 'image', 'build', '-q'] + args, env = myEnv)
@@ -219,15 +206,17 @@ def getSelfIpAddres():
   s.close()
   return ip
 
+def translateWorkingDir(workingDir, rootDir):
+  workingDir = os.path.abspath(workingDir)
+  rootDir = os.path.abspath(rootDir)
+  return workingDir.replace(rootDir, '/src')
+
 def createFn(args, unknownArgs):
   cfg = readConfig(args.cfgFileName)
   myCfg = {}
   myCfgFile = findMyCfgFile(args.cfgFileName)
   if os.path.exists(myCfgFile):
-    myCfg = readDict(myCfgFile, {
-      'SRCDIR': cfg.srcDir,
-      'HOMEDIR': cfg.homeDir,
-    })
+    myCfg = readDict(myCfgFile)
   tmpdir = "/tmp/devdocker.local"
   shutil.rmtree(tmpdir, ignore_errors=True)
   os.mkdir(tmpdir, 0o755)
@@ -238,14 +227,12 @@ ARG BASE_IMAGE
 FROM ${BASE_IMAGE}
 
 ARG UID
-ARG HOMEDIR
-ARG SRCDIR
-RUN mkdir -p $(dirname $HOMEDIR)
-RUN useradd -u $UID -m -d $HOMEDIR devdocker
+RUN mkdir -p /home/devdocker /src
+RUN useradd -u $UID -m -d /home/devdocker devdocker
+RUN chown -R devdocker:devdocker /home/devdocker /src
 RUN echo "devdocker ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
 USER devdocker
-WORKDIR $SRCDIR
-RUN mkdir -p $SRCDIR && sudo chown devdocker:devdocker $SRCDIR
+WORKDIR /src
       """)
     devnull = open(os.devnull, 'w')
     # There is a bug in github packages which requires that the image must
@@ -255,8 +242,7 @@ RUN mkdir -p $SRCDIR && sudo chown devdocker:devdocker $SRCDIR
     imgDigest = dockerImageBuild(
         ['--build-arg', 'BASE_IMAGE=%s' % cfg.imageTag,
          '--build-arg', 'UID=%d' % os.getuid(),
-         '--build-arg', 'HOMEDIR=%s' % cfg.homeDir,
-         '--build-arg', 'SRCDIR=%s' % cfg.srcDir, tmpdir])
+         tmpdir])
     envFlags = [
       '-e', 'DEVDOCKER_HOST=%s' % getSelfIpAddres(),
       '-e', 'DEVDOCKER_VERSION=%s' % cfg.imageVersion,
@@ -303,13 +289,15 @@ RUN mkdir -p $SRCDIR && sudo chown devdocker:devdocker $SRCDIR
     # of *not* mounting the source and syncing that into the container
     # via mutagen, docker-bg-sync etc.
     if not 'mountSrcDir' in dir(cfg) or cfg.mountSrcDir:
-      mountFlags = [ '-v', '%s:%s:delegated' % (cfg.srcDir, cfg.srcDir) ]
+      mountFlags = [ '-v', '%s:/src:delegated' % os.path.abspath('.')]
     if 'mount' in dir(cfg):
       for m in cfg.mount:
+        m = os.path.expanduser(m)
         maybeCreateDir(m)
         mountFlags.extend(['-v', m])
     if 'mount' in dir(myCfg):
       for m in myCfg.mount:
+        m = os.path.expanduser(m)
         maybeCreateDir(m)
         mountFlags.extend(['-v', m])
     networkFlags = []
@@ -350,7 +338,7 @@ def execFn(args, unknownArgs):
   checkDevdockerVersion(args.strict, cfg)
   # We setup devdocker containers such that absolute paths outside the
   # container also work inside the container.
-  workingDir = os.path.abspath(args.cwd)
+  workingDir = translateWorkingDir(os.path.abspath(args.cwd), cfg.rootDir)
   if args.interactive:
     # We inject a super-hacky sleep statement because for some weird
     # reason the terminal behavior (number of columns etc) are properly
@@ -373,7 +361,8 @@ def execFn(args, unknownArgs):
 def shellFn(args, unknownArgs):
   cfg = readConfig(args.cfgFileName)
   checkDevdockerVersion(args.strict, cfg)
-  workingDir = os.path.abspath(os.getcwd())
+  workingDir = translateWorkingDir(
+    os.path.abspath(os.getcwd()), cfg.rootDir)
   subprocess.call(
       ['docker', 'exec', '-it', '-w', workingDir,
        cfg.containerName, '/bin/bash'])
